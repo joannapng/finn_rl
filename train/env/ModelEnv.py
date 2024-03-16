@@ -174,14 +174,15 @@ class ModelEnv(gym.Env):
         self.finetuner.finetune()
 
         acc = self.finetuner.validate()
-        self.action_running_mean = (self.cur_ind) / (self.cur_ind + 1) * (action[0] + action[1]) / (2 * self.max_bit) \
-                                    + 1 / (self.cur_ind + 1) * self.action_running_mean
+        self.action_running_mean = (self.cur_ind + 1) * (action[0] + action[1]) / (2 * self.max_bit) \
+                                    + (self.cur_ind) * self.action_running_mean
         reward = self.reward(acc)
 
         if self.is_final_layer():
             obs = self.layer_embedding[self.cur_ind, :].copy()
             terminated = True
             info = {"accuracy": acc}
+            print(f'Accuracy: {acc}, Size: {self.action_running_mean}')
             return obs, reward, terminated, False, info
         
         terminated = False
@@ -194,7 +195,7 @@ class ModelEnv(gym.Env):
         return obs, reward, terminated, False, info
         
     def reward(self, acc):
-        r1 = (acc - self.orig_acc)
+        r1 = acc
         r2 = -(self.action_running_mean)
         return (np.array([r1, r2]) * self.utility_weights).sum()
 

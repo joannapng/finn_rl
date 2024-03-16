@@ -3,3 +3,5 @@ pretrain/data/*
 pretrain/checkpoints/*
 __pycache__
 nohup.out
+models/*
+agents/*

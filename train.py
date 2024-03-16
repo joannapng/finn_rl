@@ -1,4 +1,5 @@
 import argparse
+import torch
 import torchvision
 import numpy as np
 from train.env import ModelEnv
@@ -62,15 +63,16 @@ def main():
     args = parser.parse_args()
     envs = []
     agents = []
-    weights = [[1.0, 0.0000], [1.0, 0.0025], [1.0, 0.0050], [1.0, 0.0075], [1.0, 0.0100]]
+    weights = [[0.9, 0.1], [0.75, 0.25], [0.5, 0.5], [0.25, 0.75], [0.1, 0.9]] # do not use 0 because obviously 1-bit for the area part
 
     for i in range(args.num_agents):
         envs.append(ModelEnv(args, np.array(weights[i]), get_model_config(args.model_name, args.custom_model_name)))
         agents.append(DDPG("MlpPolicy", envs[-1], verbose = 1))
     
     for i, agent in enumerate(agents):
-        agent.learn(total_timesteps = 20, log_interval = 10)
-        agent.save("agent_{}_{}".format(weights[i][0], weights[i][1]))
+        agent.learn(total_timesteps = len(envs[i].quantizable_idx) * 20, log_interval = 10)
+        agent.save("agents/agent_{}_{}".format(weights[i][0], weights[i][1]))
+        torch.save(envs[i].model.state_dict(), "models/model_{}_{}".format(weights[i][0], weights[i][1]))
     
 if __name__ == "__main__":
     main()
