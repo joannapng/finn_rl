@@ -10,9 +10,9 @@ from brevitas.graph.utils import get_module
 from brevitas.graph.quantize import preprocess_for_quantize
 import brevitas.nn as qnn
 
-from quantizer import Quantizer
-from finetune import Finetuner
-from utils import measure_model
+from ..quantizer import Quantizer
+from ..finetune import Finetuner
+from ..utils import measure_model
 
 from gymnasium import spaces
 from stable_baselines3.common.env_checker import check_env
@@ -23,13 +23,13 @@ class LayerTypes(IntEnum):
     CONV2D = 2
 
 class ModelEnv(gym.Env):
-    def __init__(self, args, model_config):
+    def __init__(self, args, weights, model_config):
         self.args = args
 
         self.observation_space = spaces.Box(low = 0.0, high = 1.0, shape=(10, ), dtype = np.float32)
         self.action_space = spaces.Box(low = -1.0, high = 1.0, shape = (2, ), dtype = np.float32)
         self.num_objectives = 2
-        self.utility_weights = None
+        self.utility_weights = weights
 
         self.quantizable_layer_types = [nn.Conv1d,
                                         nn.Conv2d,
@@ -112,51 +112,7 @@ class ModelEnv(gym.Env):
                         this_state.append([module.kernel_size[0]])
                         this_state.append([np.prod(module.weight.size())])
                         this_state.append([module.in_h * module.in_w])
-                    elif type(module) == nn.ConvTranspose1d:
-                        this_state.append([i])
-                        this_state.append([LayerTypes.CONVTRANSPOSE1D])
-                        this_state.append([module.in_channels])
-                        this_state.append([module.out_channels])
-                        this_state.append([module.stride[0]])
-                        this_state.append([module.kernel_size[0]])
-                        this_state.append([np.prod(module.weight.size())])
-                        this_state.append([module.in_h * module.in_w])
-                    elif type(module) == nn.ConvTranspose2d:
-                        this_state.append([i])
-                        this_state.append([LayerTypes.CONVTRANSPOSE2D])
-                        this_state.append([module.in_channels])
-                        this_state.append([module.out_channels])
-                        this_state.append([module.stride[0]])
-                        this_state.append([module.kernel_size[0]])
-                        this_state.append([np.prod(module.weight.size())])
-                        this_state.append([module.in_h * module.in_w])
-                    '''
-                    elif type(module) == nn.MultiHeadAttention:
-                        this_state.append([i])
-                        this_state.append([LayerTypes.MHA])
-                        this_state.append([module.embed_dim])
-                        this_state.append([module.num_heads])
-                        this_state.append([0])
-                        this_state.append([1])
-                        this_state.append([np.prod(module.weight.size())])
-                    elif type(module) == nn.LSTM:
-                        this_state.append([i])
-                        this_state.append([LayerTypes.LSTM])
-                        this_state.append([module.input_size])
-                        this_state.append([module.hidden_size])
-                        this_state.append([0])
-                        this_state.append([1])
-                        this_state.append([np.prod(module.weight.size())])
-                    elif type(module) == nn.RNN:
-                        this_state.append([i])
-                        this_state.append([LayerTypes.RNN])
-                        this_state.append([module.input_size])
-                        this_state.append([module.hidden_size])
-                        this_state.append([0])
-                        this_state.append([1])
-                        this_state.append([np.prod(module.weight.size())])
-                    '''
-        
+
                     this_state.append([1.]) # previous action for weights
                     this_state.append([1.]) # previous action for activations
                     layer_embedding.append(np.hstack(this_state))
@@ -177,9 +133,9 @@ class ModelEnv(gym.Env):
     def reset(self, seed = None, option = None):
         super().reset(seed = seed)
 
-        self.model = copy.deepcopy(self.orig_model).to(self.trainer.device)
+        self.model = copy.deepcopy(self.orig_model).to(self.finetuner.device)
         self.model = preprocess_for_quantize(self.model)
-        self.model.to(self.trainer.device)
+        self.model.to(self.finetuner.device)
 
         self.finetuner.model = self.model
         self.finetuner.model.to(self.finetuner.device)
@@ -209,7 +165,7 @@ class ModelEnv(gym.Env):
         )
 
         self.finetuner.model = self.model
-        self.finetuner.model.to(self.trainer.device)
+        self.finetuner.model.to(self.finetuner.device)
         self.finetuner.calibrate()
 
         self.finetuner.validate()
@@ -240,7 +196,7 @@ class ModelEnv(gym.Env):
     def reward(self, acc):
         r1 = (acc - self.orig_acc)
         r2 = -(self.action_running_mean)
-        return np.array([r1, r2])
+        return (np.array([r1, r2]) * self.utility_weights).sum()
 
     def get_action(self, action):
         action = action.astype(np.float32)

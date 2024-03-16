@@ -10,9 +10,9 @@ from torch.utils.data import DataLoader, sampler, random_split
 from torchvision import transforms
 from torchvision.datasets import CIFAR10, MNIST
 import torchvision.models
-from logger import Logger
-from models import LeNet5
-from utils import get_torchvision_model
+from ..logger import Logger
+from ..models import LeNet5
+from ..utils import *
 
 networks = {'LeNet5' : LeNet5}
 
@@ -139,7 +139,7 @@ class Trainer(object):
             self.model = builder(num_classes = self.num_classes, in_channels = self.in_channels).to(self.device)
         else:
             # if model-path is specified, it will be loaded below
-            self.model = get_torchvision_model(self.args.model_name, self.num_classes, self.device, self.args.pretrained and self.args.model_path is None)
+            self.model = utils.get_torchvision_model(self.args.model_name, self.num_classes, self.device, self.args.pretrained and self.args.model_path is None)
 
         if self.args.resume_from is not None and not self.args.pretrained: # resume training from checkpoint
             print('Loading model from checkpoint at: {}'.format(self.args.resume_from))

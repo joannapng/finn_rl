@@ -1,7 +1,7 @@
 import argparse
 import torchvision
-from trainer import Trainer
-from utils import get_model_config
+from pretrain.trainer import Trainer
+from pretrain.utils import get_model_config
 
 model_names = sorted(name for name in torchvision.models.__dict__ if name.islower() and not name.startswith("__") and
                      callable(torchvision.models.__dict__[name]) and not name.startswith("get_"))

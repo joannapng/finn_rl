@@ -1,6 +1,9 @@
 import argparse
 import torchvision
-from agent import Agent
+import numpy as np
+from train.env import ModelEnv
+from pretrain.utils import get_model_config
+from stable_baselines3 import DDPG
 
 model_names = sorted(name for name in torchvision.models.__dict__ if name.islower() and not name.startswith("__") and
                      callable(torchvision.models.__dict__[name]) and not name.startswith("get_"))
@@ -53,11 +56,21 @@ parser.add_argument('--min-bit', type=int, default=1, help = 'Minimum bit width 
 parser.add_argument('--max-bit', type=int, default=8, help = 'Maximum bit width (default: 8)')
 
 ### ----- AGENT ------ ###
-parser.add_argument('--num_agents', default = 10, type = int, help = 'Number of agents')
+parser.add_argument('--num_agents', default = 5, type = int, help = 'Number of agents')
 
 def main():
     args = parser.parse_args()
-    agent = Agent(args)
+    envs = []
+    agents = []
+    weights = [[1.0, 0.0000], [1.0, 0.0025], [1.0, 0.0050], [1.0, 0.0075], [1.0, 0.0100]]
 
+    for i in range(args.num_agents):
+        envs.append(ModelEnv(args, np.array(weights[i]), get_model_config(args.model_name, args.custom_model_name)))
+        agents.append(DDPG("MlpPolicy", envs[-1], verbose = 1))
+    
+    for i, agent in enumerate(agents):
+        agent.learn(total_timesteps = 20, log_interval = 10)
+        agent.save("agent_{}_{}".format(weights[i][0], weights[i][1]))
+    
 if __name__ == "__main__":
     main()
