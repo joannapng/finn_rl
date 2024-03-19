@@ -146,8 +146,11 @@ class Finetuner(object):
             self.model = get_torchvision_model(self.args.model_name, self.num_classes, self.device, False)
 
         print('Loading model from {}'.format(self.args.model_path))
+
+        self.orig_acc = None
         package = torch.load(self.args.model_path, map_location = self.device)
         self.model.load_state_dict(package['state_dict'])
+        
         self.model.to(self.device)
         self.orig_acc = package['best_val_acc']
 

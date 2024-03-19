@@ -139,7 +139,7 @@ class Trainer(object):
             self.model = builder(num_classes = self.num_classes, in_channels = self.in_channels).to(self.device)
         else:
             # if model-path is specified, it will be loaded below
-            self.model = utils.get_torchvision_model(self.args.model_name, self.num_classes, self.device, self.args.pretrained and self.args.model_path is None)
+            self.model = get_torchvision_model(self.args.model_name, self.num_classes, self.device, self.args.pretrained and self.args.model_path is None)
 
         if self.args.resume_from is not None and not self.args.pretrained: # resume training from checkpoint
             print('Loading model from checkpoint at: {}'.format(self.args.resume_from))
@@ -151,7 +151,9 @@ class Trainer(object):
         if self.args.pretrained and self.args.model_path is not None:
             print('Loading pretrained model')
             package = torch.load(self.args.model_path, map_location = self.device)
-            self.model.load_state_dict(package['state_dict'])
+            #self.model.load_state_dict(package['state_dict'])
+            self.model.load_state_dict(package, strict = False)
+            
             self.model.to(self.device)
             
     def init_output(self):
@@ -247,7 +249,7 @@ class Trainer(object):
         if self.args.pretrained == True:
             print('Storing pretrained model')
             test_accuracy = self.check_accuracy(self.test_loader, self.model)
-            self.checkpoint(name, -1, test_accuracy, 'best.tar')
+            #self.checkpoint(name, -1, test_accuracy, 'best.tar')
         else:
             print("Starting training")
 

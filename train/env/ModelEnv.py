@@ -166,16 +166,15 @@ class ModelEnv(gym.Env):
 
         self.finetuner.model = self.model
         self.finetuner.model.to(self.finetuner.device)
-        self.finetuner.calibrate()
 
+        self.finetuner.calibrate()
         self.finetuner.validate()
         self.finetuner.init_finetuning_optim()
         self.finetuner.init_loss()
         self.finetuner.finetune()
 
         acc = self.finetuner.validate()
-        self.action_running_mean = (self.cur_ind + 1) * (action[0] + action[1]) / (2 * self.max_bit) \
-                                    + (self.cur_ind) * self.action_running_mean
+        self.action_running_mean = ((action[0] + action[1]) / (2 * self.max_bit) + (self.cur_ind) * self.action_running_mean) / (self.cur_ind + 1)
         reward = self.reward(acc)
 
         if self.is_final_layer():
@@ -196,7 +195,7 @@ class ModelEnv(gym.Env):
         
     def reward(self, acc):
         r1 = acc
-        r2 = -(self.action_running_mean)
+        r2 = -(self.action_running_mean) * 100
         return (np.array([r1, r2]) * self.utility_weights).sum()
 
     def get_action(self, action):
