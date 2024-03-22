@@ -8,6 +8,8 @@ from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.results_plotter import load_results, ts2xy, plot_results
 from stable_baselines3.common.noise import NormalActionNoise
 from stable_baselines3 import DDPG
+import brevitas.onnx as bo
+from brevitas.quant_tensor import QuantTensor
 
 model_names = sorted(name for name in torchvision.models.__dict__ if name.islower() and not name.startswith("__") and
                      callable(torchvision.models.__dict__[name]) and not name.startswith("get_"))
@@ -71,15 +73,25 @@ def main():
     for i in range(args.num_agents):
         envs.append(Monitor(ModelEnv(args, np.array(weights[i]), get_model_config(args.model_name, args.custom_model_name)), f'agent_{weights[i][0]}_{weights[i][1]}'))
         n_actions = envs[-1].action_space.shape[-1]
-        action_noise = NormalActionNoise(mean=np.zeros(n_actions), sigma=0.1 * np.ones(n_actions))
-        agents.append(DDPG("MlpPolicy", envs[-1], action_noise = action_noise, verbose = 1))
+        agents.append(DDPG("MlpPolicy", envs[-1], action_noise = None, verbose = 1))
     
     for i, agent in enumerate(agents):
-        agent.learn(total_timesteps = len(envs[i].quantizable_idx) * 100, log_interval = 5)
-        agent.save("agents/agent_{}_{}".format(weights[i][0], weights[i][1]))
-
-        envs[i].model.eval()
-        torch.save(envs[i].model.state_dict(), "models/model_{}_{}".format(weights[i][0], weights[i][1]))
+        rl_model = agent.load("agents/agent_{}_{}".format(weights[i][0], weights[i][1]))
+        env = envs[i]
+        done = False
+        obs, _ = envs[i].reset()
+        while not done:
+            action, _states = rl_model.predict(obs)
+            obs, rewards, done, _, info = env.step(action)
+        
+        model = env.model
+        model_config = get_model_config(args.model_name, args.custom_model_name)
+        center_crop_shape = model_config['center_crop_shape']
+        img_shape = center_crop_shape
+        device, dtype = next(model.parameters()).device, next(model.parameters()).dtype
+        ref_input = torch.ones(1, 1, img_shape, img_shape, device = device, dtype = dtype)
+        name = f'model_{weights[i][0]}_{weights[i][1]}.onnx'
+        bo.export_qonnx(model, ref_input, export_path = name)
     
 if __name__ == "__main__":
     main()
