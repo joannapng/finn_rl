@@ -55,10 +55,17 @@ class ModelEnv(gym.Env):
 
         self.quantizer = Quantizer(
             self.model,
-            args.scaling_per_output_channel,
+            args.weight_bit_width,
+            args.act_bit_width,
+            args.bias_bit_width,
+            args.weight_quant_granularity,
             args.act_quant_percentile,
             args.act_quant_type,
-            args.scale_factor_type
+            args.scale_factor_type,
+            args.quant_format,
+            args.act_quant_calibration_type,
+            args.weight_quant_calibration_type,
+            args.weight_quant_type
         )
     
         self.orig_acc = self.finetuner.orig_acc

@@ -3,6 +3,7 @@ import brevitas
 import brevitas.nn as qnn
 import operator
 
+from brevitas.core.scaling.standalone import ParameterFromStatsFromParameterScaling
 from brevitas.quant.shifted_scaled_int import ShiftedUint8ActPerTensorFloat
 from brevitas.quant.scaled_int import Int16Bias, Int32Bias, Int8ActPerTensorFloat, Uint8ActPerTensorFloat, Int8WeightPerTensorFloat
 from brevitas.inject.enum import RestrictValueType
@@ -14,129 +15,323 @@ from brevitas.graph.utils import get_module
 from brevitas.graph.base import InsertModuleCallAfter
 import torch
 from brevitas.graph.base import ModuleToModuleByInstance
+from brevitas.quant.experimental.float import Fp8e4m3Act
+from brevitas.quant.experimental.float import Fp8e4m3ActPerTensorFloat
+from brevitas.quant.experimental.float import Fp8e4m3ActPerTensorFloatMSE
+from brevitas.quant.experimental.float import Fp8e4m3WeightPerChannelFloat
+from brevitas.quant.experimental.float import Fp8e4m3WeightPerChannelFloatMSE
+from brevitas.quant.experimental.float import Fp8e4m3WeightPerTensorFloat
+from brevitas.quant.experimental.float import Fp8e4m3WeightPerTensorFloatMSE
+from brevitas.quant.fixed_point import Int8ActPerTensorFixedPoint
+from brevitas.quant.fixed_point import Int8ActPerTensorFixedPointMSE
+from brevitas.quant.fixed_point import Int8WeightPerChannelFixedPoint
+from brevitas.quant.fixed_point import Int8WeightPerChannelFixedPointMSE
+from brevitas.quant.fixed_point import Int8WeightPerTensorFixedPoint
+from brevitas.quant.fixed_point import Int8WeightPerTensorFixedPointMSE
+from brevitas.quant.scaled_int import Int8ActPerTensorFloat
+from brevitas.quant.scaled_int import Int8ActPerTensorFloatMSE
+from brevitas.quant.scaled_int import Int8WeightPerChannelFloat
+from brevitas.quant.scaled_int import Int8WeightPerChannelFloatMSE
+from brevitas.quant.scaled_int import Int8WeightPerTensorFloat
+from brevitas.quant.scaled_int import Int8WeightPerTensorFloatMSE
+from brevitas.quant.scaled_int import Int16Bias
+from brevitas.quant.scaled_int import Int32Bias
+from brevitas.quant.shifted_scaled_int import ShiftedUint8ActPerTensorFixedPoint
+from brevitas.quant.shifted_scaled_int import ShiftedUint8ActPerTensorFloat
+from brevitas.quant.shifted_scaled_int import ShiftedUint8ActPerTensorFloatMSE
+from brevitas.quant.shifted_scaled_int import ShiftedUint8WeightPerChannelFloat
+from brevitas.quant.shifted_scaled_int import ShiftedUint8WeightPerChannelFloatMSE
+from brevitas.quant.shifted_scaled_int import ShiftedUint8WeightPerTensorFloat
+from brevitas.quant.shifted_scaled_int import ShiftedUint8WeightPerTensorFloatMSE
 
-ADD_FNS = [torch.add, operator.add, operator.iadd]
+from brevitas.graph.standardize import DisableLastReturnQuantTensor
 
-ADD_METHODS = ['add', 'add_']
-CAT = brevitas.original_cat
 
-PRECISION_PRESERVING_MODULES = (
-    nn.Dropout, nn.Dropout2d, nn.Dropout3d, nn.MaxPool1d, nn.MaxPool2d, nn.MaxPool3d)
+BIAS_BIT_WIDTH_MAP = {32: Int32Bias, 16: Int16Bias, None: None}
+UNSIGNED_ACT_TUPLE = (nn.ReLU, nn.ReLU6, nn.Sigmoid, nn.Hardsigmoid)
+WEIGHT_QUANT_MAP = {
+    'int': {
+        'float_scale': {
+            'stats': {
+                'per_tensor': {
+                    'sym': Int8WeightPerTensorFloat, 'asym': ShiftedUint8WeightPerTensorFloat},
+                'per_channel': {
+                    'sym': Int8WeightPerChannelFloat, 'asym': ShiftedUint8WeightPerChannelFloat}},
+            'mse': {
+                'per_tensor': {
+                    'sym': Int8WeightPerTensorFloatMSE,
+                    'asym': ShiftedUint8WeightPerTensorFloatMSE},
+                'per_channel': {
+                    'sym': Int8WeightPerChannelFloatMSE,
+                    'asym': ShiftedUint8WeightPerChannelFloatMSE},},},
+        'po2_scale': {
+            'stats': {
+                'per_tensor': {
+                    'sym': Int8WeightPerTensorFixedPoint},
+                'per_channel': {
+                    'sym': Int8WeightPerChannelFixedPoint},},
+            'mse': {
+                'per_tensor': {
+                    'sym': Int8WeightPerTensorFixedPointMSE},
+                'per_channel': {
+                    'sym': Int8WeightPerChannelFixedPointMSE}},}},
+    'float': {
+        'float_scale': {
+            'stats': {
+                'per_tensor': {
+                    'sym': Fp8e4m3WeightPerTensorFloat},
+                'per_channel': {
+                    'sym': Fp8e4m3WeightPerChannelFloat}},
+            'mse': {
+                'per_tensor': {
+                    'sym': Fp8e4m3WeightPerTensorFloatMSE},
+                'per_channel': {
+                    'sym': Fp8e4m3WeightPerChannelFloatMSE}}}}}
 
-SIGN_PRESERVING_MODULES = (
-    nn.Dropout,
-    nn.Dropout2d,
-    nn.Dropout3d,
-    nn.MaxPool1d,
-    nn.MaxPool2d,
-    nn.MaxPool3d,
-    nn.AvgPool1d,
-    nn.AvgPool2d,
-    nn.AvgPool3d,
-    nn.AdaptiveAvgPool1d,
-    nn.AdaptiveAvgPool2d,
-    nn.AdaptiveAvgPool3d)
+INPUT_QUANT_MAP = {
+    'int': {
+        'float_scale': {
+            'stats': {
+                'per_tensor': {
+                    'sym': Int8ActPerTensorFloat, 'asym': ShiftedUint8ActPerTensorFloat}},
+            'mse': {
+                'per_tensor': {
+                    'sym': Int8ActPerTensorFloatMSE, 'asym': ShiftedUint8ActPerTensorFloatMSE}}},
+        'po2_scale': {
+            'stats': {
+                'per_tensor': {
+                    'sym': Int8ActPerTensorFixedPoint, 'asym': ShiftedUint8ActPerTensorFixedPoint},
+            },
+            'mse': {
+                'per_tensor': {
+                    'sym': Int8ActPerTensorFixedPointMSE}},}},
+    'float': {
+        'float_scale': {
+            'stats': {
+                'per_tensor': {
+                    'sym': Fp8e4m3ActPerTensorFloat}},
+            'mse': {
+                'per_tensor': {
+                    'sym': Fp8e4m3ActPerTensorFloat},}}}}
 
-LAYER_MAP = {
-    nn.AvgPool2d:
-        None,
-    nn.MultiheadAttention: (
-        qnn.QuantMultiheadAttention,
-        {
-            'in_proj_input_quant': Int8ActPerTensorFloat,
-            'in_proj_weight_quant': Int8WeightPerTensorFloat,
-            'in_proj_bias_quant': Int32Bias,
-            'attn_output_weights_quant': Uint8ActPerTensorFloat,
-            'q_scaled_quant': Int8ActPerTensorFloat,
-            'k_transposed_quant': Int8ActPerTensorFloat,
-            'v_quant': Int8ActPerTensorFloat,
-            'out_proj_input_quant': Int8ActPerTensorFloat,
-            'out_proj_weight_quant': Int8WeightPerTensorFloat,
-            'out_proj_bias_quant': Int32Bias,
-            'return_quant_tensor': False}),
-    nn.LSTM: (
-        qnn.QuantLSTM,
-        {
-            'weight_quant': Int8WeightPerTensorFloat,
-            'bias_quant': Int32Bias,
-            'io_quant': Int8ActPerTensorFloat,
-            'gate_acc_quant': Int8ActPerTensorFloat,
-            'sigmoid_quant': Uint8ActPerTensorFloat,
-            'tanh_quant': Int8ActPerTensorFloat,
-            'cell_state_quant': Int8ActPerTensorFloat,
-            'return_quant_tensor': False}),
-    nn.RNN: (
-        qnn.QuantRNN,
-        {
-            'weight_quant': Int8WeightPerTensorFloat,
-            'bias_quant': Int32Bias,
-            'io_quant': Int8ActPerTensorFloat,
-            'gate_acc_quant': Int8ActPerTensorFloat,
-            'return_quant_tensor': False}),
-    nn.Conv1d: (
-        qnn.QuantConv1d,
-        {
-            'input_quant': Int8ActPerTensorFloat,
-            'weight_quant': Int8WeightPerTensorFloat,
-            'bias_quant': Int32Bias,
-            'return_quant_tensor': False}),
-    nn.Conv2d: (
-        qnn.QuantConv2d,
-        {
-            'input_quant': Int8ActPerTensorFloat,
-            'weight_quant': Int8WeightPerTensorFloat,
-            'bias_quant': Int32Bias,
-            'return_quant_tensor': False}),
-    nn.ConvTranspose1d: (
-        qnn.QuantConvTranspose1d,
-        {
-            'input_quant': Int8ActPerTensorFloat,
-            'weight_quant': Int8WeightPerTensorFloat,
-            'bias_quant': Int32Bias,
-            'return_quant_tensor': False}),
-    nn.ConvTranspose2d: (
-        qnn.QuantConvTranspose2d,
-        {
-            'input_quant': Int8ActPerTensorFloat,
-            'weight_quant': Int8WeightPerTensorFloat,
-            'bias_quant': Int32Bias,
-            'return_quant_tensor': False}),
-    nn.Linear: (
-        qnn.QuantLinear,
-        {
-            'input_quant': Int8ActPerTensorFloat,
-            'weight_quant': Int8WeightPerTensorFloat,
-            'bias_quant': Int32Bias,
-            'return_quant_tensor': False})}
 
-BIAS_BIT_WIDTH_MAP = {'int32': Int32Bias, 'int16': Int16Bias}
-
-QUANT_IDENTITY_MAP = {
-    'signed':
-        (qnn.QuantIdentity, {
-            'act_quant': Int8ActPerTensorFloat, 'return_quant_tensor': True}),
-    'unsigned':
-        (qnn.QuantIdentity, {
-            'act_quant': Uint8ActPerTensorFloat, 'return_quant_tensor': True}),}
 
 class Quantizer(object):
     def __init__(
             self,
             model,
-            scaling_per_output_channel,
+            weight_bit_width,
+            act_bit_width,
+            bias_bit_width,
+            weight_quant_granularity,
             act_quant_percentile,
             act_quant_type,
             scale_factor_type,
-            weight_narrow_range=False,
-            act_bit_width=32,
-            weight_bit_width=32,
-            bias_bit_width=32
+            quant_format,
+            act_param_method,
+            weight_param_method,
+            weight_quant_type,
+            act_quant_granularity = 'per_tensor',
+            uint_sym_act_for_unsigned_values = True
     ):
         self.model = model
-        act_quant_asym = None
-        if act_quant_type == 'asymmetric':
-            act_quant_asym = ShiftedUint8ActPerTensorFloat
+        weight_scale_type = scale_factor_type
+        act_scale_type = scale_factor_type
+
+        weight_quant_format = quant_format
+        act_quant_format = quant_format
+
+        weight_bit_width_dict = {}
+        act_bit_width_dict = {}
+        weight_bit_width_dict['weight_bit_width'] = weight_bit_width
+        act_bit_width_dict['act_bit_width'] = act_bit_width
+
+        quant_layer_map, quant_act_map, quant_identity_map = self.create_quant_maps(
+            weight_bit_width = weight_bit_width,
+            weight_param_method = weight_param_method,
+            weight_scale_type = weight_scale_type,
+            weight_quant_type = weight_quant_type,
+            weight_quant_granularity = weight_quant_granularity,
+            weight_narrow_range = True,
+            weight_quant_format = weight_quant_format,
+            act_quant_format = act_quant_format,
+            uint_sym_act_for_unsigned_values = True,
+            act_bit_width = act_bit_width,
+            act_scale_type = act_scale_type,
+            act_param_method = act_param_method,
+            act_quant_type = act_quant_type,
+            act_quant_granularity = act_quant_granularity,
+            act_quant_percentile = act_quant_percentile
+        )
+
+        self.quantize_kwargs = {
+            'compute_layer_map' : quant_layer_map,
+            'quant_act_map' : quant_act_map,
+            'quant_identity_map' : quant_identity_map
+        }
+
+        self.model = self.quantize_input(self.model)
+
+    def create_quant_maps(
+            self,
+            bias_bit_width,
+            weight_bit_width,
+            weight_param_method,
+            weight_scale_type,
+            weight_quant_type,
+            weight_quant_granularity,
+            weight_narrow_range,
+            weight_quant_format,
+            act_quant_format,
+            uint_sym_act_for_unsigned_values = True,
+            act_bit_width = None,
+            act_scale_type = None,
+            act_param_method = None,
+            act_quant_type = None,
+            act_quant_granularity = None,
+            act_quant_percentile = None
+    ):
         
+        def kwargs_prefix(prefix, weight_kwargs):
+            return {prefix + k: v for k, v in weight_kwargs.items()}
+        
+        weight_bit_width_dict = {'bit_width' : weight_bit_width}
+        act_bit_width_dict = {'bit_width': act_bit_width}
+
+        bias_quant = BIAS_BIT_WIDTH_MAP[bias_bit_width] if act_bit_width is not None else None
+        weight_quant = WEIGHT_QUANT_MAP[weight_quant_format][weight_scale_type][weight_param_method][weight_quant_granularity][weight_quant_type]
+        weight_quant = weight_quant.let(**weight_bit_width_dict)
+
+        act_quant = INPUT_QUANT_MAP[act_quant_format][act_scale_type][act_param_method][act_quant_granularity][act_quant_type]
+        sym_act_quant = INPUT_QUANT_MAP[act_quant_format][act_scale_type][act_param_method][act_quant_granularity]['sym']
+        per_tensor_act_quant = INPUT_QUANT_MAP[act_quant_format][act_scale_type][act_param_method]['per_tensor'][act_quant_type]
+        act_quant = act_quant.let(**act_bit_width_dict)
+        sym_act_quant = sym_act_quant.let(**act_bit_width_dict)
+        per_tensor_act_quant = per_tensor_act_quant.let(**act_bit_width_dict)
+
+        weight_quant = weight_quant.let(
+            **{
+                'narrow_range' : weight_narrow_range,
+                'scaling_impl': ParameterFromStatsFromParameterScaling
+            }
+        )
+
+        # TODO: if weight quantization is symmetric
+        act_quant = act_quant.let(
+            **{
+                'high_percentile_q': act_quant_percentile, 'dtype' : torch.float32
+            }
+        )
+
+        sym_act_quant = sym_act_quant.let(
+            **{
+                'high_percentile_q': act_quant_percentile, 'dtype': torch.float32
+            }
+        )
+
+        per_tensor_act_quant = per_tensor_act_quant.let(
+            **{
+                'high_percentile_q': act_quant_percentile, 'dtype': torch.float32
+            }
+        )
+
+        weight_quant_dict = {'weight_quant': weight_quant}
+
+        quant_wbiol_kwargs = {
+            **weight_quant_dict,
+            'dtype': torch.float32,
+            'return_quant_tensor': False,
+            'bias_quant': bias_quant
+        }
+
+        quant_mha_kwargs = {
+            **kwargs_prefix('in_proj_', weight_quant_dict),
+            **kwargs_prefix('out_proj_', weight_quant_dict),
+            'in_proj_input_quant': None,
+            'in_proj_bias_quant': bias_quant,
+            'softmax_input_quant': None,
+            'attn_output_weights_quant': sym_act_quant,
+            'q_scaled_quant': sym_act_quant,
+            'k_transposed_quant': sym_act_quant,
+            'v_quant': sym_act_quant,
+            'out_proj_input_quant': act_quant,
+            'out_proj_bias_quant': bias_quant,
+            'out_proj_output_quant': None,
+            # activation equalization requires packed_in_proj
+            # since it supports only self-attention
+            'packed_in_proj': True,
+            'dtype': torch.float32,
+            'return_quant_tensor': False}
+        quant_act_kwargs = {'act_quant': act_quant, 'return_quant_tensor' : True}
+        unsigned_quant_act_kwargs = quant_act_kwargs.copy()
+        if uint_sym_act_for_unsigned_values:
+            quant_mha_kwargs['attn_output_weights_signed'] = False
+            unsigned_quant_act_kwargs['signed'] = False
+
+        quant_layer_map = {
+        torch.nn.Linear: (qnn.QuantLinear, quant_wbiol_kwargs),
+        torch.nn.MultiheadAttention: (qnn.QuantMultiheadAttention, quant_mha_kwargs),
+        torch.nn.Conv1d: (qnn.QuantConv1d, quant_wbiol_kwargs),
+        torch.nn.Conv2d: (qnn.QuantConv2d, quant_wbiol_kwargs),
+        torch.nn.ConvTranspose1d: (qnn.QuantConvTranspose1d, quant_wbiol_kwargs),
+        torch.nn.ConvTranspose2d: (qnn.QuantConvTranspose2d, quant_wbiol_kwargs),}
+
+        quant_act_map = {
+            torch.nn.ReLU: (qnn.QuantReLU, {
+                **unsigned_quant_act_kwargs}),
+            torch.nn.ReLU6: (qnn.QuantReLU, {
+                **unsigned_quant_act_kwargs}),
+            torch.nn.Sigmoid: (qnn.QuantSigmoid, {
+                **unsigned_quant_act_kwargs}),}
+        quant_identity_map = {
+            'signed': (qnn.QuantIdentity, {
+                **quant_act_kwargs}),
+            'unsigned': (qnn.QuantIdentity, {
+                **unsigned_quant_act_kwargs}),}
+
+        return quant_layer_map, quant_act_map, quant_identity_map
+    
+    def quantize_input(self,
+                        model,
+                        input_quantizer = self.quantize_kwargs['quant_identity_map'].get('signed', None)):
+        ignore_missing_keys_state = config.IGNORE_MISSING_KEYS
+        config.IGNORE_MISSING_KEYS = True
+        training_state = model.training
+        model.eval()
+
+        rewriters = []
+        if input_quantizer is None:
+                return model
+        for node in model.graph.nodes:
+                if node.op == 'placeholder':
+                    act_quant, kwargs_act_quant = input_quantizer
+                    inp_quant = act_quant(**kwargs_act_quant)
+                    name = node.name + '_quant'
+                    model.add_module(name, inp_quant)
+                    rewriters.append(InsertModuleCallAfter(name, node))
+        for rewriter in rewriters:
+                model = rewriter.apply(model)
+
+        model = DisableLastReturnQuantTensor().apply(model)
+        model.train(training_state)
+        config.IGNORE_MISSING_KEYS = ignore_missing_keys_state
+        return model
+
+    def quantize(self,
+                    model,
+                    quant_identity_map = None,
+                    compute_layer_map = None,
+                    quant_act_map = None,
+                    unsigned_act_tuple = UNSIGNED_ACT_TUPLE,
+                    requantize_layer_handler_output = True
+        ):
+
+            ignore_missing_keys_state = config.IGNORE_MISSING_KEYS
+            config.IGNORE_MISSING_KEYS = True,
+            training_state = model.training
+            model.eval()
+
+'''  
         map = self.update_quant_map(
             LAYER_MAP,
             scale_factor_type,
@@ -364,3 +559,5 @@ def _tensor_quant_in_list(act_quant, module_list, same_sign):
         elif not same_sign and m_tq.scaling_impl is tq.scaling_impl and m_tq.int_scaling_impl is tq.int_scaling_impl:
             return True
     return False
+
+'''
