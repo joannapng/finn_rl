@@ -209,11 +209,6 @@ class Finetuner(object):
                     if i % self.args.print_every == 0:
                         print("Epoch: [{}/{}], Step: [{}/{}], Loss: {:.4f}"
                             .format(epoch, self.finetuning_epochs, i, num_steps, loss))
-                
-                # Check validation accuracy every epoch
-
-                print('------- Validation accuracy -------')
-                val_accuracy = self.check_accuracy(self.val_loader, self.model)
 
             print("Training Complete")
             # Testing accuracy in the testing dataset

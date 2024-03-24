@@ -204,7 +204,8 @@ class Quantizer(object):
         weight_bit_width_dict = {'bit_width' : weight_bit_width}
         act_bit_width_dict = {'bit_width': act_bit_width}
 
-        bias_quant = BIAS_BIT_WIDTH_MAP[bias_bit_width] if act_bit_width is not None else None
+        # bias_quant = BIAS_BIT_WIDTH_MAP[bias_bit_width] if act_bit_width is not None else None
+        bias_quant = None
         weight_quant = WEIGHT_QUANT_MAP[weight_quant_format][weight_scale_type][weight_param_method][weight_quant_granularity][weight_quant_type]
         weight_quant = weight_quant.let(**weight_bit_width_dict)
 
@@ -427,7 +428,7 @@ class Quantizer(object):
                             model, node, [], quant_act_map, same_sign = False
                         ) and not 'input_quant' in quant_module_kwargs and len(quant_identity_map):
                             previous_node = node.all_input_nodes[0]
-                            previous_node_users = list(previous_node_users.keys())
+                            previous_node_users = list(previous_node.users.keys())
                             previous_node_users.remove(node)
 
                             act_quant, kwargs_act_quant = quant_identity_map['signed']

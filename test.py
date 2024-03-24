@@ -4,12 +4,11 @@ import torchvision
 import numpy as np
 from train.env import ModelEnv
 from pretrain.utils import get_model_config
+import brevitas.onnx as bo
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.results_plotter import load_results, ts2xy, plot_results
 from stable_baselines3.common.noise import NormalActionNoise
 from stable_baselines3 import DDPG
-import brevitas.onnx as bo
-from brevitas.quant_tensor import QuantTensor
 
 model_names = sorted(name for name in torchvision.models.__dict__ if name.islower() and not name.startswith("__") and
                      callable(torchvision.models.__dict__[name]) and not name.startswith("get_"))
@@ -49,15 +48,29 @@ parser.add_argument('--loss', default = 'CrossEntropy', choices = ['CrossEntropy
 parser.add_argument('--device', default = 'GPU', help = 'Device for training')
 
 ### ----- QUANTIZATION PARAMETERS ----- ###
-parser.add_argument('--scale-factor-type', default='float32', choices=['float32', 'po2'], help = 'Type for scale factors (default: float32)')
-parser.add_argument('--act-bit-width', default=32, type=int, help = 'Activations bit width (default: 32)')
-parser.add_argument('--weight-bit-width', default=32, type=int, help = 'Weight bit width (default: 32)')
+parser.add_argument('--scale-factor-type', default='float_scale', choices=['float_scale', 'po2_scale'], help = 'Type for scale factors (default: float)')
+parser.add_argument('--act-bit-width', default=8, type=int, help = 'Activations bit width (default: 32)')
+parser.add_argument('--weight-bit-width', default=8, type=int, help = 'Weight bit width (default: 32)')
 parser.add_argument('--bias-bit-width', default=32, choices=[32, 16], help = 'Bias bit width (default: 32)')
-parser.add_argument('--act-quant-type', default='symmetric', choices=['symmetric', 'assymetric'], help = 'Activation quantization type (default: symmetric)')
+parser.add_argument('--act-quant-type', default='sym', choices=['sym', 'asym'], help = 'Activation quantization type (default: sym)')
+parser.add_argument('--weight-quant-type', default = 'sym', choices = ['sym', 'asym'], help = 'Weight quantization type (default: sym)')
+parser.add_argument('--weight-quant-granularity', default = 'per_tensor', choices = ['per_tensor', 'per_channel'], help = 'Activation Quantization type (default: per_tensor)')
+parser.add_argument('--weight-quant-calibration-type', default = 'stats', choices = ['stats', 'mse'], help = 'Weight quantization calibration type (default: stats)')
+parser.add_argument('--act-equalization', default = None, choices = ['fx', 'layerwise', 'None'], help = 'Activation equalization type (default: None)')
+parser.add_argument('-act-quant-calibration-type', default = 'stats', choices = ['stats', 'mse'], help = 'Activation quantization calibration type (default: stats)')
 parser.add_argument('--act-quant-percentile', default=99.999, type=float, help = 'Percentile to use for stats of activation quantization (default: 99.999)')
-parser.add_argument('--scaling-per-output-channel', default=True, help = 'Weight Scaling per output channel (default: enabled)')
-parser.add_argument('--bias-corr', default=True, help = 'Bias correction after calibration (default: enabled)')
+parser.add_argument('--graph-eq-iterations', default = 20, type = int, help = 'Number of iterations for graph equalization (default: 20)')
+parser.add_argument('--learned-round-iters', default = 1000, type = int, help = 'Number of iterations for learned round for each layer (default: 1000)')
+parser.add_argument('--learned-round-lr', default = 1e-3, type = float, help = 'Learning rate for learned round (default: 1e-3)')
+parser.add_argument('--scaling-per-output-channel', default=True, action = 'store_true', help = 'Weight Scaling per output channel (default: enabled)')
+parser.add_argument('--bias-corr', default=True, action = 'store_true', help = 'Bias correction after calibration (default: enabled)')
+parser.add_argument('--graph-eq-merge-bias', default = True, action = 'store_true', help = 'Merge bias when performing graph equaltion (default: enabled)')
 parser.add_argument('--weight-narrow-range', default=True, help = 'Narrow range for weight quantization (default: enabled)')
+parser.add_argument('--gpfq-p', default=1.0, type=float, help='P parameter for GPFQ (default: 1.0)')
+parser.add_argument('--quant-format', default = 'int', choices = ['int', 'float'], help = 'Quantization format to use for weights and activations (default: int)')
+
+# TODO: add parameters for float quantization
+# TODO: add PTQ extra steps
 parser.add_argument('--min-bit', type=int, default=1, help = 'Minimum bit width (default: 1)')
 parser.add_argument('--max-bit', type=int, default=8, help = 'Maximum bit width (default: 8)')
 
@@ -91,7 +104,7 @@ def main():
         device, dtype = next(model.parameters()).device, next(model.parameters()).dtype
         ref_input = torch.ones(1, 1, img_shape, img_shape, device = device, dtype = dtype)
         name = f'model_{weights[i][0]}_{weights[i][1]}.onnx'
-        bo.export_qonnx(model, ref_input, export_path = name)
+        bo.export_qonnx(model, ref_input, export_path = name, opset_version=9)
     
 if __name__ == "__main__":
     main()

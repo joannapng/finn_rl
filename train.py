@@ -48,8 +48,8 @@ parser.add_argument('--device', default = 'GPU', help = 'Device for training')
 
 ### ----- QUANTIZATION PARAMETERS ----- ###
 parser.add_argument('--scale-factor-type', default='float_scale', choices=['float_scale', 'po2_scale'], help = 'Type for scale factors (default: float)')
-parser.add_argument('--act-bit-width', default=32, type=int, help = 'Activations bit width (default: 32)')
-parser.add_argument('--weight-bit-width', default=32, type=int, help = 'Weight bit width (default: 32)')
+parser.add_argument('--act-bit-width', default=8, type=int, help = 'Activations bit width (default: 8)')
+parser.add_argument('--weight-bit-width', default=8, type=int, help = 'Weight bit width (default: 8)')
 parser.add_argument('--bias-bit-width', default=32, choices=[32, 16], help = 'Bias bit width (default: 32)')
 parser.add_argument('--act-quant-type', default='sym', choices=['sym', 'asym'], help = 'Activation quantization type (default: sym)')
 parser.add_argument('--weight-quant-type', default = 'sym', choices = ['sym', 'asym'], help = 'Weight quantization type (default: sym)')
