@@ -204,8 +204,8 @@ class Quantizer(object):
         weight_bit_width_dict = {'bit_width' : weight_bit_width}
         act_bit_width_dict = {'bit_width': act_bit_width}
 
-        # bias_quant = BIAS_BIT_WIDTH_MAP[bias_bit_width] if act_bit_width is not None else None
-        bias_quant = None
+        bias_quant = BIAS_BIT_WIDTH_MAP[bias_bit_width] if act_bit_width is not None else None
+        #bias_quant = None
         weight_quant = WEIGHT_QUANT_MAP[weight_quant_format][weight_scale_type][weight_param_method][weight_quant_granularity][weight_quant_type]
         weight_quant = weight_quant.let(**weight_bit_width_dict)
 
@@ -305,10 +305,10 @@ class Quantizer(object):
         config.IGNORE_MISSING_KEYS = True
         training_state = model.training
         model.eval()
-    
+
         model = inp_placeholder_handler(model, input_quantizer)
 
-        model = DisableLastReturnQuantTensor().apply(model)
+        #model = DisableLastReturnQuantTensor().apply(model)
         model.train(training_state)
         config.IGNORE_MISSING_KEYS = ignore_missing_keys_state
         return model
@@ -351,7 +351,7 @@ class Quantizer(object):
             
         model = rewriter.apply(model)
 
-        model = DisableLastReturnQuantTensor().apply(model)
+        #model = DisableLastReturnQuantTensor().apply(model)
         model.train(training_state)
         config.IGNORE_MISSING_KEYS = ignore_missing_keys_state
 
@@ -372,7 +372,7 @@ class Quantizer(object):
             model, quant_identity_map, quant_act_map, unsigned_act_tuple
         )
         
-        model = DisableLastReturnQuantTensor().apply(model)
+        #model = DisableLastReturnQuantTensor().apply(model)
         model.train(training_state)
         config.IGNORE_MISSING_KEYS = ignore_missing_keys_state
         
@@ -393,7 +393,7 @@ class Quantizer(object):
             model, quant_identity_map, quant_act_map, unsigned_act_tuple, align_input_quant
         )
         
-        model = DisableLastReturnQuantTensor().apply(model)
+        #model = DisableLastReturnQuantTensor().apply(model)
         model.train(training_state)
         config.IGNORE_MISSING_KEYS = ignore_missing_keys_state
 
@@ -448,7 +448,7 @@ class Quantizer(object):
         for rewriter in rewriters:
             model = rewriter.apply(model)
 
-        model = DisableLastReturnQuantTensor().apply(model)
+        #model = DisableLastReturnQuantTensor().apply(model)
         model.train(training_state)
         config.IGNORE_MISSING_KEYS = ignore_missing_keys_state
 
