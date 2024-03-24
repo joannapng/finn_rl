@@ -57,6 +57,7 @@ def main():
 	model = tidy_up(model)
 	model = post_processing(model)
 	model = streamline(model)
+	model.save(''.join(args.onnx_model.split('.')[:-1]) + '_transformed.onnx')
 
 if __name__=="__main__":
 	main()
