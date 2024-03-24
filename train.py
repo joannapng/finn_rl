@@ -47,7 +47,7 @@ parser.add_argument('--loss', default = 'CrossEntropy', choices = ['CrossEntropy
 parser.add_argument('--device', default = 'GPU', help = 'Device for training')
 
 ### ----- QUANTIZATION PARAMETERS ----- ###
-parser.add_argument('--scale-factor-type', default='float32', choices=['float32', 'po2'], help = 'Type for scale factors (default: float32)')
+parser.add_argument('--scale-factor-type', default='float_scale', choices=['float_scale', 'po2_scale'], help = 'Type for scale factors (default: float)')
 parser.add_argument('--act-bit-width', default=32, type=int, help = 'Activations bit width (default: 32)')
 parser.add_argument('--weight-bit-width', default=32, type=int, help = 'Weight bit width (default: 32)')
 parser.add_argument('--bias-bit-width', default=32, choices=[32, 16], help = 'Bias bit width (default: 32)')
@@ -61,7 +61,6 @@ parser.add_argument('--act-quant-percentile', default=99.999, type=float, help =
 parser.add_argument('--graph-eq-iterations', default = 20, type = int, help = 'Number of iterations for graph equalization (default: 20)')
 parser.add_argument('--learned-round-iters', default = 1000, type = int, help = 'Number of iterations for learned round for each layer (default: 1000)')
 parser.add_argument('--learned-round-lr', default = 1e-3, type = float, help = 'Learning rate for learned round (default: 1e-3)')
-parser.add_argument('--act-quant-percentile', default = 99.999, type = float, help = 'Percentile to use for stats of activation quantization (default: 99.999)')
 parser.add_argument('--scaling-per-output-channel', default=True, action = 'store_true', help = 'Weight Scaling per output channel (default: enabled)')
 parser.add_argument('--bias-corr', default=True, action = 'store_true', help = 'Bias correction after calibration (default: enabled)')
 parser.add_argument('--graph-eq-merge-bias', default = True, action = 'store_true', help = 'Merge bias when performing graph equaltion (default: enabled)')
@@ -90,11 +89,13 @@ def main():
         agents.append(DDPG("MlpPolicy", envs[-1], action_noise = action_noise, verbose = 1))
     
     for i, agent in enumerate(agents):
-        agent.learn(total_timesteps = len(envs[i].quantizable_idx) * 100, log_interval = 5)
+        agent.learn(total_timesteps = len(envs[i].quantizable_idx) * 1, log_interval = 5)
         agent.save("agents/agent_{}_{}".format(weights[i][0], weights[i][1]))
 
+        '''
         envs[i].model.eval()
         torch.save(envs[i].model.state_dict(), "models/model_{}_{}".format(weights[i][0], weights[i][1]))
+        '''
     
 if __name__ == "__main__":
     main()

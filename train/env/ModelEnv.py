@@ -47,7 +47,7 @@ class ModelEnv(gym.Env):
 
         self.quantizable_layers = [
             nn.Linear,
-            nn.MultiHeadAttention,
+            nn.MultiheadAttention,
             nn.Conv1d,
             nn.Conv2d,
             nn.ConvTranspose1d,
@@ -94,7 +94,6 @@ class ModelEnv(gym.Env):
         Construct the static part of the state
         '''
         self.model = preprocess_for_quantize(self.model)
-        
         _, params, size_params, size_activations = measure_model(self.model, 32, 32, self.finetuner.in_channels, quant_strategy = None, bias_quant = 32) # measure feature maps for each model
         
         self.quantizable_idx = []
@@ -108,9 +107,9 @@ class ModelEnv(gym.Env):
             if node.op == 'call_module':
                 module = get_module(self.model, node.target)
                 if type(module) in self.quantizable_acts:
-                    self.quantizable_idx.append(i)
+                    self.quantizable_idx.append(i + 1)
                     self.layer_types.append(type(module))
-                    this_state.append(i)
+                    this_state.append(i + 1) # + 1 because we are going to add input quantizer
                     this_state.append(1)
                     
                     if type(module) == nn.ReLU:
@@ -138,14 +137,14 @@ class ModelEnv(gym.Env):
             if node.op == 'call_module':
                 module = get_module(self.model, node.target)
                 if type(module) in self.quantizable_layers:
-                    self.quantizable_idx.append(i)
+                    self.quantizable_idx.append(i + 1)
                     self.layer_types.append(type(module))
-                    this_state.append(i)
+                    this_state.append(i + 1)
                     this_state.append(0)
 
                     if type(module) == nn.Linear:
                         this_state.append(LayerTypes.LINEAR)
-                    elif type(module) == nn.MultiHeadAttention:
+                    elif type(module) == nn.MultiheadAttention:
                         this_state.append(LayerTypes.MHA)
                     elif type(module) == nn.Conv1d:
                         this_state.append(LayerTypes.CONV1D)
@@ -174,12 +173,16 @@ class ModelEnv(gym.Env):
         self.layer_embedding = layer_embedding
         
         self.orig_size = size_params + size_activations
+        print(layer_embedding)
+        print(self.quantizable_idx)
+        print(self.model)
 
     def reset(self, seed = None, option = None):
         super().reset(seed = seed)
 
         self.model = copy.deepcopy(self.orig_model).to(self.finetuner.device)
         self.model = preprocess_for_quantize(self.model)
+        self.model = self.quantizer.quantize_input(self.model)
         self.model.to(self.finetuner.device)
 
         self.finetuner.model = self.model
@@ -202,12 +205,21 @@ class ModelEnv(gym.Env):
 
         print(self.strategy)
 
-        self.model = self.quantizer.layerwise_quantize(
-            self.model,
-            self.index_to_quantize,
-            int(action[0]),
-            int(action[1])
-        )
+        if self.cur_ind < self.num_quant_acts:
+            self.model = self.quantizer.quantize_act(
+                self.model,
+                self.index_to_quantize,
+                int(action[0])
+            )
+        
+        if self.cur_ind == self.num_quant_acts:
+            self.model = self.quantizer.quantize_output(self.model)
+            self.model = self.quantizer.handle_residuals(self.model)
+        
+        if self.cur_ind >= self.num_quant_acts:
+            self.model = self.quantizer.quantize_layer(self.model, 
+                                                       self.index_to_quantize, 
+                                                       int(action[0]))
 
         self.finetuner.model = self.model
         self.finetuner.model.to(self.finetuner.device)
@@ -219,7 +231,7 @@ class ModelEnv(gym.Env):
         self.finetuner.finetune()
 
         acc = self.finetuner.validate()
-        self.action_running_mean = ((action[0] + action[1]) / (2 * self.max_bit) + (self.cur_ind) * self.action_running_mean) / (self.cur_ind + 1)
+        self.action_running_mean = ((action[0]) / (self.max_bit) + (self.cur_ind) * self.action_running_mean) / (self.cur_ind + 1)
         reward = self.reward(acc)
 
         if self.is_final_layer():
@@ -232,8 +244,6 @@ class ModelEnv(gym.Env):
         terminated = False
         self.cur_ind += 1 
         self.index_to_quantize = self.quantizable_idx[self.cur_ind]
-        self.layer_embedding[self.cur_ind][-2] = action[0] / self.max_bit
-        self.layer_embedding[self.cur_ind][-1] = action[1] / self.max_bit
         obs = self.layer_embedding[self.cur_ind, :].copy()
         info = {"accuracy": acc}
         return obs, reward, terminated, False, info
@@ -248,7 +258,6 @@ class ModelEnv(gym.Env):
         lbound, rbound = self.min_bit, self.max_bit
         action = (action + 1) * (rbound - lbound) / 2.0 + self.min_bit - 0.5
         action = np.ceil(action).astype(int)
-        self.last_action = action
         return action
 
     def is_final_layer(self):
