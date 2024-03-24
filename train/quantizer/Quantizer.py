@@ -292,8 +292,8 @@ class Quantizer(object):
         return quant_layer_map, quant_act_map, quant_identity_map
     
     def quantize_input(self,
-                        model,
-                        input_quantizer = self.quantize_kwargs['quant_identity_map'].get('signed', None)):
+                        model):
+        input_quantizer = self.quantize_kwargs['quant_identity_map'].get('signed', None)
         ignore_missing_keys_state = config.IGNORE_MISSING_KEYS
         config.IGNORE_MISSING_KEYS = True
         training_state = model.training

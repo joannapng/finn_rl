@@ -19,23 +19,40 @@ from stable_baselines3.common.env_checker import check_env
 
 class LayerTypes(IntEnum):
     LINEAR = 0
-    CONV1D = 1
-    CONV2D = 2
+    MHA = 1
+    CONV1D = 2
+    CONV2D = 3
+    CONVTRANSPOSE1D = 4
+    CONVTRANSPOSE2D = 5
+
+class ActTypes(IntEnum):
+    RELU = 0
+    RELU6 = 1
+    SIGMOID = 2
 
 class ModelEnv(gym.Env):
     def __init__(self, args, weights, model_config):
         self.args = args
 
-        self.observation_space = spaces.Box(low = 0.0, high = 1.0, shape=(10, ), dtype = np.float32)
-        self.action_space = spaces.Box(low = -1.0, high = 1.0, shape = (2, ), dtype = np.float32)
+        self.observation_space = spaces.Box(low = 0.0, high = 1.0, shape=(5, ), dtype = np.float32)
+        self.action_space = spaces.Box(low = -1.0, high = 1.0, shape = (1, ), dtype = np.float32)
         self.num_objectives = 2
         self.utility_weights = weights
 
-        self.quantizable_layer_types = [nn.Conv1d,
-                                        nn.Conv2d,
-                                        nn.ConvTranspose1d,
-                                        nn.ConvTranspose2d,
-                                        nn.Linear]
+        self.quantizable_acts = [
+            nn.ReLU,
+            nn.ReLU6,
+            nn.Sigmoid
+        ]
+
+        self.quantizable_layers = [
+            nn.Linear,
+            nn.MultiHeadAttention,
+            nn.Conv1d,
+            nn.Conv2d,
+            nn.ConvTranspose1d,
+            nn.ConvTranspose2d
+        ]
 
         self.finetuner = Finetuner(args, model_config)
         self.model = copy.deepcopy(self.finetuner.model)
@@ -82,46 +99,67 @@ class ModelEnv(gym.Env):
         
         self.quantizable_idx = []
         self.layer_types = []
+        self.num_quant_acts = 0
         layer_embedding = []
 
+        # Activations first
         for i, node in enumerate(self.model.graph.nodes):
             this_state = []
             if node.op == 'call_module':
                 module = get_module(self.model, node.target)
-                if type(module) in self.quantizable_layer_types:
+                if type(module) in self.quantizable_acts:
                     self.quantizable_idx.append(i)
                     self.layer_types.append(type(module))
+                    this_state.append(i)
+                    this_state.append(1)
                     
-                    if type(module) == nn.Linear:
-                        this_state.append([i])
-                        this_state.append([LayerTypes.LINEAR])
-                        this_state.append([module.in_features])
-                        this_state.append([module.out_features])
-                        this_state.append([0]) # stride
-                        this_state.append([1]) # kernel size
-                        this_state.append([np.prod(module.weight.size())])
-                        this_state.append([module.in_h * module.in_w])
-                    elif type(module) == nn.Conv1d:
-                        this_state.append([i])
-                        this_state.append([LayerTypes.CONV1D])
-                        this_state.append([module.in_channels])
-                        this_state.append([module.out_channels])
-                        this_state.append([module.stride[0]])
-                        this_state.append([module.kernel_size[0]])
-                        this_state.append([np.prod(module.weight.size())])
-                        this_state.append([module.in_h * module.in_w])
-                    elif type(module) == nn.Conv2d:
-                        this_state.append([i])
-                        this_state.append([LayerTypes.CONV2D])
-                        this_state.append([module.in_channels])
-                        this_state.append([module.out_channels])
-                        this_state.append([module.stride[0]])
-                        this_state.append([module.kernel_size[0]])
-                        this_state.append([np.prod(module.weight.size())])
-                        this_state.append([module.in_h * module.in_w])
+                    if type(module) == nn.ReLU:
+                        this_state.append(ActTypes.RELU)
+                    elif type(module) == nn.ReLU6:
+                        this_state.append(ActTypes.RELU6)
+                    elif type(module) == nn.Sigmoid:
+                        this_state.append(ActTypes.SIGMOID)
 
-                    this_state.append([1.]) # previous action for weights
-                    this_state.append([1.]) # previous action for activations
+                    weights = prev_module.weight
+                    fan_in, fan_out = nn.init._calculate_fan_in_and_fan_out(weights)
+                    this_state.append(fan_in)
+                    this_state.append(fan_out)
+                    layer_embedding.append(np.hstack(this_state))
+
+                # get fan in and fan out of previous layer with learnable parameters
+                if type(module) in self.quantizable_layers:
+                    prev_module = module
+        
+        self.num_quant_acts = len(self.quantizable_idx)
+
+        # Compute layers
+        for i, node in enumerate(self.model.graph.nodes):
+            this_state = []
+            if node.op == 'call_module':
+                module = get_module(self.model, node.target)
+                if type(module) in self.quantizable_layers:
+                    self.quantizable_idx.append(i)
+                    self.layer_types.append(type(module))
+                    this_state.append(i)
+                    this_state.append(0)
+
+                    if type(module) == nn.Linear:
+                        this_state.append(LayerTypes.LINEAR)
+                    elif type(module) == nn.MultiHeadAttention:
+                        this_state.append(LayerTypes.MHA)
+                    elif type(module) == nn.Conv1d:
+                        this_state.append(LayerTypes.CONV1D)
+                    elif type(module) == nn.Conv2d:
+                        this_state.append(LayerTypes.CONV2D)
+                    elif type(module) == nn.ConvTranpose1d:
+                        this_state.append(LayerTypes.CONVTRANSPOSE1D)
+                    elif type(module) == nn.ConvTranspose2d:
+                        this_state.append(LayerTypes.CONVTRANSPOSE2D)
+
+                    weights = module.weight
+                    fan_in, fan_out = nn.init._calculate_fan_in_and_fan_out(weights)
+                    this_state.append(fan_in)
+                    this_state.append(fan_out)
                     layer_embedding.append(np.hstack(this_state))
 
         layer_embedding = np.array(layer_embedding, dtype=np.float32)
