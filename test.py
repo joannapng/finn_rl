@@ -85,7 +85,6 @@ def main():
 
     for i in range(args.num_agents):
         envs.append(Monitor(ModelEnv(args, np.array(weights[i]), get_model_config(args.model_name, args.custom_model_name)), f'agent_{weights[i][0]}_{weights[i][1]}'))
-        n_actions = envs[-1].action_space.shape[-1]
         agents.append(DDPG("MlpPolicy", envs[-1], action_noise = None, verbose = 1))
     
     for i, agent in enumerate(agents):

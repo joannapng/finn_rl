@@ -1,3 +1,4 @@
+from copy import deepcopy
 from distutils.command import clean
 from qonnx.core.modelwrapper import ModelWrapper
 from qonnx.util.cleanup import cleanup_model
@@ -6,14 +7,31 @@ from qonnx.transformation.fold_constants import FoldConstants
 from qonnx.transformation.infer_datatypes import InferDataTypes
 from qonnx.transformation.general import GiveReadableTensorNames, GiveUniqueNodeNames, RemoveStaticGraphInputs
 from qonnx.transformation.insert_topk import InsertTopK
+from qonnx.transformation.batchnorm_to_affine import BatchNormToAffine
+from qonnx.transformation.bipolar_to_xnor import ConvertBipolarMatMulToXnorPopcount
+from qonnx.transformation.change_3d_tensors_to_4d import Change3DTo4DTensors
+from qonnx.transformation.change_datalayout import ChangeDataLayoutQuantAvgPool2d
+from qonnx.transformation.channels_last import AbsorbChanFirstIntoMatMul
+from qonnx.transformation.extract_conv_bias import ExtractBiasFromConv
+from qonnx.transformation.gemm_to_matmul import GemmToMatMul
+from qonnx.transformation.general import ConvertDivToMul
+from qonnx.transformation.general import ConvertSubToAdd
+from qonnx.transformation.lower_convs_to_matmul import LowerConvsToMatMul
+from qonnx.transformation.make_input_chanlast import MakeInputChannelsLast
+from qonnx.transformation.quant_constant_folding import FoldTransposeIntoQuantInit
+from qonnx.transformation.remove import RemoveIdentityOps
+from finn.transformation.move_reshape import RemoveCNVtoFCFlatten
 
 from finn.transformation.qonnx.convert_qonnx_to_finn import ConvertQONNXtoFINN
 from finn.transformation.streamline import Streamline
+from finn.transformation.fpgadataflow.create_dataflow_partition import CreateDataflowPartition
 import finn.transformation.streamline.absorb as absorb
 import finn.transformation.streamline.collapse_repeated as collapse
 import finn.transformation.streamline.reorder as reorder
 import finn.transformation.streamline.round_thresholds as round
 import finn.transformation.streamline.sign_to_thres as sign
+import finn.transformation.fpgadataflow.convert_to_hls_layers as convert
+
 
 class Exporter:
 	def __init__(self, model_name):
@@ -26,7 +44,7 @@ class Exporter:
 		self.model.save('.'.join(self.model_name.split('.')[:-1]) + '_finn-onnx.onnx')
 		print('\033[1;32mFinished converting model from QONNX to FINN-ONNX\033[1;0m')
 	
-	def tidy_up(self, model_name = None):
+	def tidy_up(self, model_name = None, store = True):
 		print('\033[1;32mBeginning tidy up transformations\033[1;0m')
 
 		if (model_name is not None):
@@ -39,10 +57,11 @@ class Exporter:
 		self.model = self.model.transform(InferDataTypes())
 		self.model = self.model.transform(RemoveStaticGraphInputs())
 
-		if (model_name) is not None:
-			self.model.save('.'.join(model_name.split('.')[:-1]) + '_tidy.onnx')
-		else:
-			self.model.save(('.'.join(self.model_name.split('.')[:-1]) + '_tidy.onnx'))
+		if store:
+			if (model_name) is not None:
+				self.model.save('.'.join(model_name.split('.')[:-1]) + '_tidy.onnx')
+			else:
+				self.model.save(('.'.join(self.model_name.split('.')[:-1]) + '_tidy.onnx'))
 		
 		print('\033[1;32mFinished tidy up transformations\033[1;0m')
 
@@ -52,7 +71,6 @@ class Exporter:
 		if (model_name is not None):
 			self.model = ModelWrapper(model_name)
 	
-
 		if (model_name) is not None:
 			self.model.save('.'.join(model_name.split('.')[:-1]) + '_post.onnx')
 		else:
@@ -66,17 +84,32 @@ class Exporter:
 		if (model_name is not None):
 			self.model = ModelWrapper(model_name)
 		
+		transformations = [BatchNormToAffine, ConvertBipolarMatMulToXnorPopcount, Change3DTo4DTensors, ChangeDataLayoutQuantAvgPool2d, 
+					 AbsorbChanFirstIntoMatMul, ExtractBiasFromConv, GemmToMatMul, ConvertDivToMul, 
+					 ConvertSubToAdd, LowerConvsToMatMul, MakeInputChannelsLast,
+					 FoldTransposeIntoQuantInit, RemoveIdentityOps, RemoveCNVtoFCFlatten]
+
 		absorb_transformations = [getattr(absorb, transformation) for transformation in dir(absorb) if transformation.startswith('Absorb')]
 		collapse_transformations = [getattr(collapse, transformation) for transformation in dir(collapse) if transformation.startswith('Collapse') and transformation != 'CollapseRepeatedOp']
 		reorder_transformations = [getattr(reorder, transformation) for transformation in dir(reorder) if (transformation.startswith('Make') or transformation.startswith('Move')) and transformation != 'MoveOpPastFork' and transformation != 'MoveIdenticalOpPastJoinOp']
 		round_transformations = [getattr(round, transformation) for transformation in dir(round) if transformation.startswith('Round')]
 		sign_transformations = [getattr(sign, transformation) for transformation in dir(sign) if transformation.startswith('Convert')]
 
-		transformations = absorb_transformations + collapse_transformations + reorder_transformations + round_transformations
-		for transformation in transformations:
-			print(transformation)
-			self.model = self.model.transform(transformation())
-			self.model = self.model.transform(Streamline())
+		self.streamlining_transformations = transformations + reorder_transformations + absorb_transformations + collapse_transformations + round_transformations + sign_transformations
+		
+		model_was_changed = True
+		while model_was_changed:
+			self.prev_model = deepcopy(self.model)
+			model_was_changed = False
+			for transformation in self.streamlining_transformations:
+				print(transformation)
+				self.model = self.model.transform(transformation())
+				self.model = self.model.transform(Streamline())
+			
+			if (self.prev_model.model != self.model.model):
+				model_was_changed = True
+			
+			self.tidy_up(store = False)
 
 		if (model_name) is not None:
 			self.model.save('.'.join(model_name.split('.')[:-1]) + '_streamlined.onnx')
@@ -84,3 +117,52 @@ class Exporter:
 			self.model.save(('.'.join(self.model_name.split('.')[:-1]) + '_streamlined.onnx'))
 		
 		print('\033[1;32mFinished streamlining transformations\033[1;0m')
+
+	def hls_conversion(self, model_name = None):
+		print('\033[1;32mBeginning HLS conversion\033[1;0m')
+
+		if (model_name is not None):
+			self.model = ModelWrapper(model_name)
+		
+		hls_transformations = [getattr(convert, transformation) for transformation in dir(convert) if transformation.startswith('Infer')]
+
+		model_was_changed = True
+		while model_was_changed:
+			self.prev_model = deepcopy(self.model)
+			model_was_changed = False
+			for transformation in hls_transformations:
+				print(transformation)
+				self.model = self.model.transform(transformation())
+			
+			for transformation in self.streamlining_transformations:
+				print(transformation)
+				self.model = self.model.transform(transformation())
+				self.model = self.model.transform(Streamline())
+
+			if (self.prev_model.model != self.model.model):
+				model_was_changed = True
+			
+			self.tidy_up(store = False)
+
+
+		if (model_name) is not None:
+			self.model.save('.'.join(model_name.split('.')[:-1]) + '_hls.onnx')
+		else:
+			self.model.save(('.'.join(self.model_name.split('.')[:-1]) + '_hls.onnx'))
+		
+		print('\033[1;32mFinished HLS conversion\033[1;0m')
+
+	def create_dataflow_partition(self, model_name = None):
+		print('\033[1;32mCreating dataflow partition\033[1;0m')
+
+		if (model_name is not None):
+			self.model = ModelWrapper(model_name)
+		
+		self.parent_model = self.model.transform(CreateDataflowPartition())
+
+		if (model_name) is not None:
+			self.model.save('.'.join(model_name.split('.')[:-1]) + '_dataflow.onnx')
+		else:
+			self.model.save(('.'.join(self.model_name.split('.')[:-1]) + '_dataflow.onnx'))
+		
+		print('\033[1;32mFinished dataflow partition\033[1;0m')

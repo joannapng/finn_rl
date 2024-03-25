@@ -6,3 +6,4 @@ nohup.out
 models/*
 agents/*
 *.csv
+*.onnx

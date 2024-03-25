@@ -29,7 +29,8 @@ class LeNet5(nn.Module):
         out = self.relu2(self.bn2(self.conv2(out)))
         out = self.maxpool2(out)
 
-        out = out.reshape(out.size(0), -1)
+        # PUT FLATTEN HERE RESHAPE DOES NOT WORK WHEN CREATING DATAFLOW PARTITION
+        out = out.flatten(1)
         out = self.fc(out)
         out = self.relu3(out)
         out = self.fc1(out)
