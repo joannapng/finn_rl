@@ -8,7 +8,7 @@ def main():
 	args = parser.parse_args()
 
 	exporter = Exporter(args.onnx_model)
-	steps = [exporter.tidy_up, exporter.post_processing, exporter.streamline, exporter.hls_conversion, exporter.create_dataflow_partition]
+	steps = [exporter.tidy_up, exporter.post_processing, exporter.streamline, exporter.hls_conversion, exporter.create_dataflow_partition, exporter.generate_hw]
 
 	for step in steps:
 		step()

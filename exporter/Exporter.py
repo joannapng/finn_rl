@@ -32,6 +32,9 @@ import finn.transformation.streamline.round_thresholds as round
 import finn.transformation.streamline.sign_to_thres as sign
 import finn.transformation.fpgadataflow.convert_to_hls_layers as convert
 
+from finn.transformation.fpgadataflow.vitis_build import VitisBuild
+from finn.util.basic import alveo_part_map
+from qonnx.custom_op.registry import getCustomOp
 
 class Exporter:
 	def __init__(self, model_name):
@@ -159,10 +162,18 @@ class Exporter:
 			self.model = ModelWrapper(model_name)
 		
 		self.parent_model = self.model.transform(CreateDataflowPartition())
+		sdp_node = self.parent_model.get_nodes_by_op_type("StreamingDataflowPartition")[0]
+		sdp_node = getCustomOp(sdp_node)
+		self.dataflow_model_filename = sdp_node.get_nodeattr('model')
+		self.dataflow_model = ModelWrapper(self.dataflow_model_filename)
 
 		if (model_name) is not None:
-			self.model.save('.'.join(model_name.split('.')[:-1]) + '_dataflow.onnx')
+			self.dataflow_model.save('.'.join(model_name.split('.')[:-1]) + '_dataflow.onnx')
 		else:
-			self.model.save(('.'.join(self.model_name.split('.')[:-1]) + '_dataflow.onnx'))
+			self.dataflow_model.save(('.'.join(self.model_name.split('.')[:-1]) + '_dataflow.onnx'))
 		
 		print('\033[1;32mFinished dataflow partition\033[1;0m')
+
+	def generate_hw(self, model_name = None, platform = "U250", period_ns = 100):	
+		fpga_part = alveo_part_map[platform]
+		self.dataflow_model = self.dataflow_model.transform(VitisBuild(fpga_part, period_ns, platform))
