@@ -119,20 +119,20 @@ class ModelEnv(gym.Env):
                 if type(module) in self.quantizable_acts:
                     self.quantizable_idx.append(i)
                     self.layer_types.append(type(module))
-                    this_state.append(i) # + 1 because we are going to add input quantizer
-                    this_state.append(1)
+                    this_state.append([i]) # + 1 because we are going to add input quantizer
+                    this_state.append([1])
                     
                     if type(module) == nn.ReLU or type(module) == qnn.QuantReLU:
-                        this_state.append(ActTypes.RELU)
+                        this_state.append([ActTypes.RELU])
                     elif type(module) == nn.ReLU6 or type(module) == qnn.QuantReLU:
-                        this_state.append(ActTypes.RELU6)
+                        this_state.append([ActTypes.RELU6])
                     elif type(module) == nn.Sigmoid or type(module) == qnn.QuantSigmoid:
-                        this_state.append(ActTypes.SIGMOID)
+                        this_state.append([ActTypes.SIGMOID])
 
                     weights = prev_module.weight
                     _, fan_out = nn.init._calculate_fan_in_and_fan_out(weights)
-                    this_state.append(fan_out)
-                    this_state.append(fan_out)
+                    this_state.append([fan_out])
+                    this_state.append([fan_out])
                     layer_embedding.append(np.hstack(this_state))
 
                 # get fan in and fan out of previous layer with learnable parameters
@@ -149,26 +149,26 @@ class ModelEnv(gym.Env):
                 if type(module) in self.quantizable_layers:
                     self.quantizable_idx.append(i)
                     self.layer_types.append(type(module))
-                    this_state.append(i)
-                    this_state.append(0)
+                    this_state.append([i])
+                    this_state.append([0])
 
                     if type(module) == nn.Linear or type(module) == qnn.QuantLinear:
-                        this_state.append(LayerTypes.LINEAR)
+                        this_state.append([LayerTypes.LINEAR])
                     elif type(module) == nn.MultiheadAttention or type(module) == qnn.QuantMultiheadAttention:
-                        this_state.append(LayerTypes.MHA)
+                        this_state.append([LayerTypes.MHA])
                     elif type(module) == nn.Conv1d or type(module) == qnn.QuantConv1d:
-                        this_state.append(LayerTypes.CONV1D)
+                        this_state.append([LayerTypes.CONV1D])
                     elif type(module) == nn.Conv2d or type(module) == qnn.QuantConv2d:
-                        this_state.append(LayerTypes.CONV2D)
+                        this_state.append([LayerTypes.CONV2D])
                     elif type(module) == nn.ConvTranpose1d or type(module) == qnn.QuantConvTranspose1d:
-                        this_state.append(LayerTypes.CONVTRANSPOSE1D)
+                        this_state.append([LayerTypes.CONVTRANSPOSE1D])
                     elif type(module) == nn.ConvTranspose2d or type(module) == qnn.QuantConvTranspose2d:
-                        this_state.append(LayerTypes.CONVTRANSPOSE2D)
+                        this_state.append([LayerTypes.CONVTRANSPOSE2D])
 
                     weights = module.weight
                     fan_in, fan_out = nn.init._calculate_fan_in_and_fan_out(weights)
-                    this_state.append(fan_in)
-                    this_state.append(fan_out)
+                    this_state.append([fan_in])
+                    this_state.append([fan_out])
                     layer_embedding.append(np.hstack(this_state))
 
         layer_embedding = np.array(layer_embedding, dtype=np.float32)
@@ -246,6 +246,7 @@ class ModelEnv(gym.Env):
 
         self.action_running_mean = ((action[0]) / (self.max_bit) + (self.cur_ind) * self.action_running_mean) / (self.cur_ind + 1)
         reward = self.reward(acc)
+        print(reward)
 
         if self.is_final_layer():
             obs = self.layer_embedding[self.cur_ind, :].copy()
@@ -262,8 +263,8 @@ class ModelEnv(gym.Env):
         return obs, reward, terminated, False, info
         
     def reward(self, acc):
-        r1 = acc
-        r2 = -(self.action_running_mean) * 100
+        r1 = acc * 10
+        r2 = -(self.action_running_mean) * 1000
         return (np.array([r1, r2]) * self.utility_weights).sum()
 
     def get_action(self, action):

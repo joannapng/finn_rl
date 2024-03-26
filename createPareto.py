@@ -18,7 +18,7 @@ colors = ['g', 'b', 'r', 'm', 'k']
 plt.figure()
 
 for i, weight in enumerate(weights):
-	agent = pd.read_csv(f'agent_{weights[i][0]}_{weights[i][1]}.monitor.csv')
+	agent = pd.read_csv(f'agent_{weights[i][0]}_{weights[i][1]}.monitor.csv', skiprows=0, header = 1)
 	plt.plot(np.arange(100), agent['r'], c = colors[i], label = f'{weights[i][0]}_{weights[i][1]}')
 plt.title('Reward for each agent per episode')
 plt.legend()

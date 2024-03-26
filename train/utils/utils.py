@@ -153,5 +153,4 @@ def measure_model(model, H, W, num_channels, quant_strategy = None, bias_quant =
     modify_forward(model)
     model.forward(data)
     restore_forward(model)
-
     return count_ops, count_params, count_params_size, count_activations_size

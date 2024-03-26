@@ -329,7 +329,7 @@ class Quantizer(object):
                 module = get_module(model, node.target)
                 if isinstance(module, tuple(layer_map.keys())):
                     quant_module_class, quant_module_kwargs = layer_map[type(module)]
-                    quant_module_kwargs['act_bit_width'] = act_bit_width
+                    quant_module_kwargs['bit_width'] = act_bit_width
                     quant_module = quant_module_class(**quant_module_kwargs)
 
                     if len(node.users) == 1:

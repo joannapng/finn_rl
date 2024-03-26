@@ -89,7 +89,7 @@ def main():
         agents.append(DDPG("MlpPolicy", envs[-1], action_noise = action_noise, verbose = 1))
     
     for i, agent in enumerate(agents):
-        agent.learn(total_timesteps = len(envs[i].quantizable_idx) * 1, log_interval = 5)
+        agent.learn(total_timesteps = len(envs[i].quantizable_idx) * 100, log_interval = 10)
         agent.save("agents/agent_{}_{}".format(weights[i][0], weights[i][1]))
 
         '''
