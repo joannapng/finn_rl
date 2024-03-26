@@ -102,7 +102,14 @@ def main():
         img_shape = center_crop_shape
         device, dtype = next(model.parameters()).device, next(model.parameters()).dtype
         ref_input = torch.ones(1, 1, img_shape, img_shape, device = device, dtype = dtype)
+
+        # export original model to onnx
+        orig_model = env.orig_model
+        orig_model.eval()
         name = f'model_{weights[i][0]}_{weights[i][1]}.onnx'
+        torch.onnx.export(orig_model, ref_input, name, export_params = False, opset_version = 9)
+        # export quant model to qonnx
+        name = f'model_{weights[i][0]}_{weights[i][1]}_quant.onnx'
         bo.export_qonnx(model, ref_input, export_path = name, opset_version=9)
     
 if __name__ == "__main__":
