@@ -14,7 +14,7 @@ from brevitas import config
 from brevitas.graph.utils import get_module
 from brevitas.graph.utils import del_module
 from brevitas.graph.quantize import align_input_quant
-from brevitas.graph.quantize_impl import inp_placeholder_handler, add_output_quant_handler, residual_handler
+from brevitas.graph.quantize_impl import inp_placeholder_handler, add_output_quant_handler, residual_handler, output_quant_handler
 from brevitas.graph.quantize_impl import are_inputs_quantized_and_aligned
 from brevitas.graph.base import InsertModuleCallAfter
 import torch
@@ -50,7 +50,7 @@ from brevitas.quant.shifted_scaled_int import ShiftedUint8WeightPerTensorFloat
 from brevitas.quant.shifted_scaled_int import ShiftedUint8WeightPerTensorFloatMSE
 
 from brevitas.graph.standardize import DisableLastReturnQuantTensor
-
+from brevitas.graph.quantize_impl import SIGN_PRESERVING_MODULES
 
 BIAS_BIT_WIDTH_MAP = {32: Int32Bias, 16: Int16Bias, None: None}
 UNSIGNED_ACT_TUPLE = (nn.ReLU, nn.ReLU6, nn.Sigmoid, nn.Hardsigmoid)
@@ -420,6 +420,17 @@ class Quantizer(object):
             if node.op == 'call_module' and i == layer_idx:
                 module = get_module(model, node.target)
                 if isinstance(module, tuple(layer_map.keys())):
+                    if len(node.users) > 1 and all(['getitem' in n.name for n in node.users]):
+                        for n in node.users:
+                            if len(n.users) > 0:
+                                output_quant_handler(
+                                    model,
+                                    n,
+                                    rewriters,
+                                    is_sign_preserving=isinstance(module, SIGN_PRESERVING_MODULES),
+                                    quant_identity_map=quant_identity_map,
+                                    quant_act_map=quant_act_map,
+                                    unsigned_act_tuple=unsigned_act_tuple)
                     if layer_map[type(module)] is not None:
                         quant_module_class, quant_module_kwargs = layer_map[type(module)]
                         quant_module_kwargs['weight_bit_width'] = weight_bit_width

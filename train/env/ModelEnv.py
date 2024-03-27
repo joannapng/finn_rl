@@ -263,8 +263,8 @@ class ModelEnv(gym.Env):
         return obs, reward, terminated, False, info
         
     def reward(self, acc):
-        r1 = acc * 10
-        r2 = -(self.action_running_mean) * 1000
+        r1 = acc
+        r2 = -(self.action_running_mean) * 100
         return (np.array([r1, r2]) * self.utility_weights).sum()
 
     def get_action(self, action):

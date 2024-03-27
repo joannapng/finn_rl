@@ -7,11 +7,15 @@ parser.add_argument('--onnx-model', required = True, type = str, help = 'QONNX m
 def main():
 	args = parser.parse_args()
 
-	exporter = Exporter(args.onnx_model)
+	exporter = Exporter()
+	exporter.create_dataflow_partition(args.onnx_model)
+	exporter.generate_hw()
+	'''
 	steps = [exporter.tidy_up, exporter.post_processing, exporter.streamline, exporter.hls_conversion, exporter.create_dataflow_partition, exporter.generate_hw]
 
 	for step in steps:
 		step()
+	'''
 
 if __name__ == "__main__":
 	main()

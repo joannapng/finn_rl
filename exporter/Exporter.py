@@ -31,21 +31,26 @@ import finn.transformation.streamline.reorder as reorder
 import finn.transformation.streamline.round_thresholds as round
 import finn.transformation.streamline.sign_to_thres as sign
 import finn.transformation.fpgadataflow.convert_to_hls_layers as convert
+from finn.transformation.fpgadataflow.convert_to_hls_layers import InferBinaryMatrixVectorActivation, InferQuantizedMatrixVectorActivation, InferThresholdingLayer, InferVectorVectorActivation
 
 from finn.transformation.fpgadataflow.vitis_build import VitisBuild
 from finn.util.basic import alveo_part_map
 from qonnx.custom_op.registry import getCustomOp
 
+mem_mode_transformations = [InferBinaryMatrixVectorActivation, InferQuantizedMatrixVectorActivation, InferThresholdingLayer, InferVectorVectorActivation]
+
 class Exporter:
-	def __init__(self, model_name):
+	def __init__(self, model_name = None):
 		# Convert Model from QONNX to FINN-ONNX (all bit widths must be under 8 bit)
 		self.model_name = model_name
-		self.model = ModelWrapper(self.model_name)
-		self.model = cleanup_model(self.model) # VERY IMPORTANT TO CLEANUP MODEL
-		print(f'\033[1;32mConverting model {self.model_name} from QONNX to FINN-ONNX\033[1;0m')
-		self.model = self.model.transform(ConvertQONNXtoFINN())
-		self.model.save('.'.join(self.model_name.split('.')[:-1]) + '_finn-onnx.onnx')
-		print('\033[1;32mFinished converting model from QONNX to FINN-ONNX\033[1;0m')
+
+		if self.model_name is not None:
+			self.model = ModelWrapper(self.model_name)
+			self.model = cleanup_model(self.model) # VERY IMPORTANT TO CLEANUP MODEL
+			print(f'\033[1;32mConverting model {self.model_name} from QONNX to FINN-ONNX\033[1;0m')
+			self.model = self.model.transform(ConvertQONNXtoFINN())
+			self.model.save('.'.join(self.model_name.split('.')[:-1]) + '_finn-onnx.onnx')
+			print('\033[1;32mFinished converting model from QONNX to FINN-ONNX\033[1;0m')
 	
 	def tidy_up(self, model_name = None, store = True):
 		print('\033[1;32mBeginning tidy up transformations\033[1;0m')
@@ -73,6 +78,8 @@ class Exporter:
 
 		if (model_name is not None):
 			self.model = ModelWrapper(model_name)
+
+		self.model = self.model.transform(InsertTopK(k=1))
 	
 		if (model_name) is not None:
 			self.model.save('.'.join(model_name.split('.')[:-1]) + '_post.onnx')
@@ -106,6 +113,12 @@ class Exporter:
 			model_was_changed = False
 			for transformation in self.streamlining_transformations:
 				print(transformation)
+				'''
+				if (transformation in mem_mode_transformations):
+					self.model = self.model.transform(transformation(mem_mode = "decoupled"))
+				else:
+					self.model = self.model.transform(transformation())
+				'''
 				self.model = self.model.transform(transformation())
 				self.model = self.model.transform(Streamline())
 			
@@ -139,6 +152,12 @@ class Exporter:
 			
 			for transformation in self.streamlining_transformations:
 				print(transformation)
+				'''
+				if (transformation in mem_mode_transformations):
+					self.model = self.model.transform(transformation(mem_mode = "decoupled"))
+				else:
+					self.model = self.model.transform(transformation())
+				'''
 				self.model = self.model.transform(transformation())
 				self.model = self.model.transform(Streamline())
 
@@ -174,6 +193,6 @@ class Exporter:
 		
 		print('\033[1;32mFinished dataflow partition\033[1;0m')
 
-	def generate_hw(self, model_name = None, platform = "U250", period_ns = 100):	
+	def generate_hw(self, model_name = None, platform = "U250", period_ns = 100):
 		fpga_part = alveo_part_map[platform]
 		self.dataflow_model = self.dataflow_model.transform(VitisBuild(fpga_part, period_ns, platform))
