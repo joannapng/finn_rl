@@ -151,9 +151,7 @@ class Trainer(object):
         if self.args.pretrained and self.args.model_path is not None:
             print('Loading pretrained model')
             package = torch.load(self.args.model_path, map_location = self.device)
-            #self.model.load_state_dict(package['state_dict'])
-            self.model.load_state_dict(package, strict = False)
-            
+            self.model.load_state_dict(package['state_dict'])
             self.model.to(self.device)
             
     def init_output(self):
@@ -186,9 +184,9 @@ class Trainer(object):
         self.training_lr = self.args.training_lr
 
         if self.args.optimizer == 'Adam':
-            self.training_optimizer = torch.optim.Adam(self.model.parameters(), lr = self.training_lr)
+            self.training_optimizer = torch.optim.Adam(self.model.parameters(), lr = self.training_lr, weight_decay = self.args.weight_decay)
         elif self.args.optimizer == 'SGD':
-            self.training_optimizer = torch.optim.SGD(self.model.parameters(), lr = self.training_lr)
+            self.training_optimizer = torch.optim.SGD(self.model.parameters(), lr = self.training_lr, weight_decay = self.args.weight_decay)
         
         self.starting_epoch = 0
         

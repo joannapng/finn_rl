@@ -102,6 +102,7 @@ class ModelEnv(gym.Env):
         Construct the static part of the state
         '''
 
+        # if model is not already preprocessed for quantization
         if not rebuild:
             self.model = preprocess_for_quantize(self.model)
             _, params, size_params, size_activations = measure_model(self.model, 32, 32, self.finetuner.in_channels, quant_strategy = None, bias_quant = 32) # measure feature maps for each model
@@ -119,7 +120,7 @@ class ModelEnv(gym.Env):
                 if type(module) in self.quantizable_acts:
                     self.quantizable_idx.append(i)
                     self.layer_types.append(type(module))
-                    this_state.append([i]) # + 1 because we are going to add input quantizer
+                    this_state.append([i])
                     this_state.append([1])
                     
                     if type(module) == nn.ReLU or type(module) == qnn.QuantReLU:
@@ -139,6 +140,7 @@ class ModelEnv(gym.Env):
                 if type(module) in self.quantizable_layers:
                     prev_module = module
         
+        # number of activation layers
         self.num_quant_acts = len(self.quantizable_idx)
 
         # Compute layers
@@ -213,6 +215,8 @@ class ModelEnv(gym.Env):
         self.strategy.append(action)
 
         print(self.strategy)
+
+        # if not all activations have been quantized
         if self.cur_ind < self.num_quant_acts:
             self.model = self.quantizer.quantize_act(
                 self.model,
@@ -220,22 +224,27 @@ class ModelEnv(gym.Env):
                 int(action[0])
             )
         
+        # if activations have been quantized, quantize outputs and handle residuals
         if self.cur_ind == self.num_quant_acts:
             self.model = self.quantizer.quantize_output(self.model)
             self.model = self.quantizer.handle_residuals(self.model)
-            self.build_index(rebuild = True) # build index again because some index position might have changed
+
+            # build index again, because quantize output and handle residuals can insert quantizers
+            self.build_index(rebuild = True)
         
         if self.cur_ind >= self.num_quant_acts:
             self.model = self.quantizer.quantize_layer(self.model, 
                                                        self.index_to_quantize, 
                                                        int(action[0]))
-            self.build_index(rebuild = True) # quantize layer could potentially add additional quantizer layer
+            # build index again, because quanize layers can insert quantizers
+            self.build_index(rebuild = True)
 
         self.finetuner.model = self.model
         self.finetuner.model.to(self.finetuner.device)
 
         self.finetuner.calibrate()
 
+        # finetune only after all layers have been quantized
         if self.is_final_layer():
             self.finetuner.validate()
             self.finetuner.init_finetuning_optim()

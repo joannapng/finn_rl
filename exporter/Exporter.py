@@ -33,8 +33,8 @@ import finn.transformation.streamline.sign_to_thres as sign
 import finn.transformation.fpgadataflow.convert_to_hls_layers as convert
 from finn.transformation.fpgadataflow.convert_to_hls_layers import InferBinaryMatrixVectorActivation, InferQuantizedMatrixVectorActivation, InferThresholdingLayer, InferVectorVectorActivation
 
-from finn.transformation.fpgadataflow.vitis_build import VitisBuild
-from finn.util.basic import alveo_part_map
+from finn.transformation.fpgadataflow.make_zynq_proj import ZynqBuild
+from finn.util.basic import pynq_part_map
 from qonnx.custom_op.registry import getCustomOp
 
 mem_mode_transformations = [InferBinaryMatrixVectorActivation, InferQuantizedMatrixVectorActivation, InferThresholdingLayer, InferVectorVectorActivation]
@@ -193,6 +193,5 @@ class Exporter:
 		
 		print('\033[1;32mFinished dataflow partition\033[1;0m')
 
-	def generate_hw(self, model_name = None, platform = "U250", period_ns = 100):
-		fpga_part = alveo_part_map[platform]
-		self.dataflow_model = self.dataflow_model.transform(VitisBuild(fpga_part, period_ns, platform))
+	def generate_hw(self, model_name = None, platform = "Pynq-Z1", period_ns = 100):
+		self.dataflow_model = self.dataflow_model.transform(ZynqBuild(platform, period_ns, platform))
