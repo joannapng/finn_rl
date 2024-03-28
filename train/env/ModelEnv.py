@@ -255,7 +255,6 @@ class ModelEnv(gym.Env):
 
         self.action_running_mean = ((action[0]) / (self.max_bit) + (self.cur_ind) * self.action_running_mean) / (self.cur_ind + 1)
         reward = self.reward(acc)
-        print(reward)
 
         if self.is_final_layer():
             obs = self.layer_embedding[self.cur_ind, :].copy()
