@@ -55,7 +55,6 @@ class Exporter:
 		self.model_name = model_name
 
 		# TODO: move the below steps to CONVERTQONNXTOFINN function
-		'''
 		if self.model_name is not None:
 			self.model = ModelWrapper(self.model_name)
 			self.model = cleanup_model(self.model) # VERY IMPORTANT TO CLEANUP MODEL
@@ -63,7 +62,6 @@ class Exporter:
 			self.model = self.model.transform(ConvertQONNXtoFINN())
 			self.model.save('.'.join(self.model_name.split('.')[:-1]) + '_finn-onnx.onnx')
 			print('\033[1;32mFinished converting model from QONNX to FINN-ONNX\033[1;0m')
-		'''
 
 	def tidy_up(self, model_name = None, store = True):
 		print('\033[1;32mBeginning tidy up transformations\033[1;0m')
@@ -179,7 +177,6 @@ class Exporter:
 			
 			self.tidy_up(store = False)
 
-
 		if (model_name) is not None:
 			self.model.save('.'.join(model_name.split('.')[:-1]) + '_hls.onnx')
 		else:
@@ -253,9 +250,8 @@ class Exporter:
 		opt.network.summary()
 
 		self.dataflow_model = export(opt.network, self.dataflow_model)
-
 	
-	def generate_hw(self, model_name = None, platform = "U250", period_ns = 100):
+	def generate_hw(self, model_name = None, platform = "U250", period_ns = 10):
 		fpga_part = part_map[platform]
 		platform = alveo_default_platform[platform]
 		self.dataflow_model = self.dataflow_model.transform(VitisBuild(fpga_part, period_ns, platform))
