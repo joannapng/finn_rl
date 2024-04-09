@@ -1,3 +1,4 @@
+import copy
 from copy import deepcopy
 from distutils.command import clean
 from qonnx.core.modelwrapper import ModelWrapper
@@ -30,12 +31,18 @@ import finn.transformation.streamline.collapse_repeated as collapse
 import finn.transformation.streamline.reorder as reorder
 import finn.transformation.streamline.round_thresholds as round
 import finn.transformation.streamline.sign_to_thres as sign
-import finn.transformation.fpgadataflow.convert_to_hls_layers as convert
-from finn.transformation.fpgadataflow.convert_to_hls_layers import InferBinaryMatrixVectorActivation, InferQuantizedMatrixVectorActivation, InferThresholdingLayer, InferVectorVectorActivation
+import finn.transformation.fpgadataflow.convert_to_hw_layers as convert
+from finn.transformation.fpgadataflow.convert_to_hw_layers import InferBinaryMatrixVectorActivation, InferQuantizedMatrixVectorActivation, InferThresholdingLayer, InferVectorVectorActivation
 
-from finn.transformation.fpgadataflow.make_zynq_proj import ZynqBuild
-from finn.util.basic import pynq_part_map
+from finn.transformation.fpgadataflow.vitis_build import VitisBuild
+from finn.transformation.fpgadataflow.specialize_layers import SpecializeLayers
+
+from finn.util.basic import part_map, alveo_default_platform
 from qonnx.custom_op.registry import getCustomOp
+
+from samo.backend.finn.import parser
+from samo.backend.finn.export import export
+from samo.optimiser.annealing import SimulatedAnnealing
 
 mem_mode_transformations = [InferBinaryMatrixVectorActivation, InferQuantizedMatrixVectorActivation, InferThresholdingLayer, InferVectorVectorActivation]
 
@@ -185,6 +192,7 @@ class Exporter:
 		sdp_node = getCustomOp(sdp_node)
 		self.dataflow_model_filename = sdp_node.get_nodeattr('model')
 		self.dataflow_model = ModelWrapper(self.dataflow_model_filename)
+		self.dataflow_model = self.dataflow_model.transform(SpecializeLayers())
 
 		if (model_name) is not None:
 			self.dataflow_model.save('.'.join(model_name.split('.')[:-1]) + '_dataflow.onnx')
@@ -193,5 +201,48 @@ class Exporter:
 		
 		print('\033[1;32mFinished dataflow partition\033[1;0m')
 
-	def generate_hw(self, model_name = None, platform = "Pynq-Z1", period_ns = 100):
-		self.dataflow_model = self.dataflow_model.transform(ZynqBuild(platform, period_ns, platform))
+	def set_folding(self, model_name = None, platform = "U250", optimizer = "annealing", period_ns = 100):
+		if model_name is not None:
+			self.model = ModelWrapper(model_name)
+		else:
+			self.model = self.dataflow_model
+
+		graph = parser.graph(self.dataflow_model, platform, 1000 / 100)
+		graph.enable_reconf = False
+		graph.objective = "latency"
+
+		for partition in graph.partitions:
+			partition.reset()
+		
+		if optimizer == "annealing":
+			opt = SimulatedAnnealing(graph)
+
+		can_split = True
+		while can_split:
+			can_split = False
+			for i in range(len(opt.network.partitions)):
+				valid_splits = opt.network.valid_splits(i)
+				network_copy = copy.deepcopy(opt.network)
+				if valid_splits:
+					can_split = True
+					prev = opt.network.check_constraints()
+					opt.network.split(i, valid_splits[0])
+					if prev and not opt.network.check_constraints():
+						can_split = False
+						opt.network = network_copy
+
+		assert opt.network.check_constraints(), "Initial design infeasible"
+		
+		opt.optimise()
+
+		assert opt.network.check_constraints(), "Optimized design infeasible"
+
+		opt.network.summary()
+
+		self.dataflow_model = export(self.model)
+
+	
+	def generate_hw(self, model_name = None, platform = "U250", period_ns = 100):
+		fpga_part = part_map[platform]
+		platform = alveo_default_platform[platform]
+		self.dataflow_model = self.dataflow_model.transform(VitisBuild(fpga_part, period_ns, platform))
