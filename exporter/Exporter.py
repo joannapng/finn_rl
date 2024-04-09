@@ -1,6 +1,9 @@
 import copy
 from copy import deepcopy
 from distutils.command import clean
+import json
+import time 
+
 from qonnx.core.modelwrapper import ModelWrapper
 from qonnx.util.cleanup import cleanup_model
 from qonnx.transformation.infer_shapes import InferShapes
@@ -40,7 +43,7 @@ from finn.transformation.fpgadataflow.specialize_layers import SpecializeLayers
 from finn.util.basic import part_map, alveo_default_platform
 from qonnx.custom_op.registry import getCustomOp
 
-from samo.backend.finn.import parser
+from samo.backend.finn import parser
 from samo.backend.finn.export import export
 from samo.optimiser.annealing import SimulatedAnnealing
 
@@ -51,6 +54,8 @@ class Exporter:
 		# Convert Model from QONNX to FINN-ONNX (all bit widths must be under 8 bit)
 		self.model_name = model_name
 
+		# TODO: move the below steps to CONVERTQONNXTOFINN function
+		'''
 		if self.model_name is not None:
 			self.model = ModelWrapper(self.model_name)
 			self.model = cleanup_model(self.model) # VERY IMPORTANT TO CLEANUP MODEL
@@ -58,7 +63,8 @@ class Exporter:
 			self.model = self.model.transform(ConvertQONNXtoFINN())
 			self.model.save('.'.join(self.model_name.split('.')[:-1]) + '_finn-onnx.onnx')
 			print('\033[1;32mFinished converting model from QONNX to FINN-ONNX\033[1;0m')
-	
+		'''
+
 	def tidy_up(self, model_name = None, store = True):
 		print('\033[1;32mBeginning tidy up transformations\033[1;0m')
 
@@ -201,13 +207,19 @@ class Exporter:
 		
 		print('\033[1;32mFinished dataflow partition\033[1;0m')
 
-	def set_folding(self, model_name = None, platform = "U250", optimizer = "annealing", period_ns = 100):
+	def set_folding(self, model_name = None, platform = "U250", optimizer = "annealing", period_ns = 10):
 		if model_name is not None:
-			self.model = ModelWrapper(model_name)
-		else:
-			self.model = self.dataflow_model
+			self.dataflow_model = ModelWrapper(model_name)
 
-		graph = parser.graph(self.dataflow_model, platform, 1000 / 100)
+		# important for samo (it needs names to label the edges)
+		self.dataflow_model = self.dataflow_model.transform(GiveUniqueNodeNames())
+		self.dataflow_model = self.dataflow_model.transform(GiveReadableTensorNames())
+
+		platform_file = "/srv/homes/ipanagou/thesis/finn/thesis/code/samo/platforms/u250_1slr.json"
+		with open(platform_file, "r") as f:
+			platform = json.load(f)
+
+		graph = parser.parse(self.dataflow_model, platform, 1000 / period_ns)
 		graph.enable_reconf = False
 		graph.objective = "latency"
 
@@ -217,6 +229,7 @@ class Exporter:
 		if optimizer == "annealing":
 			opt = SimulatedAnnealing(graph)
 
+		opt.start_time = time.time()
 		can_split = True
 		while can_split:
 			can_split = False
@@ -239,7 +252,7 @@ class Exporter:
 
 		opt.network.summary()
 
-		self.dataflow_model = export(self.model)
+		self.dataflow_model = export(opt.network, self.dataflow_model)
 
 	
 	def generate_hw(self, model_name = None, platform = "U250", period_ns = 100):

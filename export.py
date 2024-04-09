@@ -9,11 +9,10 @@ def main():
 
 	exporter = Exporter(args.onnx_model)
 	
-	steps = [exporter.tidy_up, exporter.post_processing, exporter.streamline, exporter.hls_conversion, exporter.create_dataflow_partition, exporter.set_folding, exporter.generate_hw]
-
+	#steps = [exporter.tidy_up, exporter.post_processing, exporter.streamline, exporter.hls_conversion, exporter.create_dataflow_partition, exporter.set_folding]
+	steps = [exporter.set_folding]
 	for step in steps:
-		step()
-	
+		step(args.onnx_model)
 
 if __name__ == "__main__":
 	main()
