@@ -3,6 +3,7 @@ from copy import deepcopy
 from distutils.command import clean
 import json
 import time 
+import os
 
 from qonnx.core.modelwrapper import ModelWrapper
 from qonnx.util.cleanup import cleanup_model
@@ -43,9 +44,28 @@ from finn.transformation.fpgadataflow.specialize_layers import SpecializeLayers
 from finn.util.basic import part_map, alveo_default_platform
 from qonnx.custom_op.registry import getCustomOp
 
+from finn.transformation.fpgadataflow.make_pynq_driver import MakePYNQDriver
+from finn.util.basic import make_build_dir
+build_dir = os.environ["FINN_BUILD_DIR"]
+
 from samo.backend.finn import parser
 from samo.backend.finn.export import export
 from samo.optimiser.annealing import SimulatedAnnealing
+
+from finn.transformation.fpgadataflow.insert_dwc import InsertDWC
+from finn.transformation.fpgadataflow.insert_fifo import InsertFIFO
+from finn.transformation.fpgadataflow.prepare_ip import PrepareIP
+from finn.transformation.fpgadataflow.hlssynth_ip import HLSSynthIP
+from finn.transformation.fpgadataflow.prepare_rtlsim import PrepareRTLSim
+from finn.transformation.fpgadataflow.annotate_cycles import AnnotateCycles
+from finn.analysis.fpgadataflow.dataflow_performance import dataflow_performance
+from finn.transformation.fpgadataflow.derive_characteristic import (
+	DeriveCharacteristic, 
+	DeriveFIFOSizes,
+)
+
+from shutil import copy
+from distutils.dir_util import copy_tree
 
 mem_mode_transformations = [InferBinaryMatrixVectorActivation, InferQuantizedMatrixVectorActivation, InferThresholdingLayer, InferVectorVectorActivation]
 
@@ -204,6 +224,37 @@ class Exporter:
 		
 		print('\033[1;32mFinished dataflow partition\033[1;0m')
 
+	def insert_fifos(self, model_name = None):
+		if (model_name is not None):
+			self.dataflow_model = ModelWrapper(model_name)
+		
+		model = copy.deepcopy(self.dataflow_model)
+
+		model = model.transform(InsertDWC())
+		model = model.transform(SpecializeLayers())
+		model = model.transform(GiveUniqueNodeNames())
+		model = model.transform(
+			PrepareIP(part_map["U250"], 10)
+		)
+		model = model.transform(HLSSynthIP())
+		model = model.transform(PrepareRTLSim())
+		model = model.transform(AnnotateCycles())
+		period = model.analysis(dataflow_performance)["max_cycles"] + 10
+		model = model.transform(DeriveCharacteristic(period))
+		model = model.transform(DeriveFIFOSizes())
+		model = model.transform(
+			InsertFIFO(
+				vivado_ram_style="auto",
+				max_qsrl_depth=256,
+				create_shallow_fifos=True,
+			)
+		)
+		model = model.transform(SpecializeLayers())
+		model = model.transform(GiveUniqueNodeNames())
+		model = model.transform(GiveReadableTensorNames())
+
+		self.dataflow_model = copy.deepcopy(model)
+
 	def set_folding(self, model_name = None, platform = "U250", optimizer = "annealing", period_ns = 10):
 		if model_name is not None:
 			self.dataflow_model = ModelWrapper(model_name)
@@ -255,3 +306,26 @@ class Exporter:
 		fpga_part = part_map[platform]
 		platform = alveo_default_platform[platform]
 		self.dataflow_model = self.dataflow_model.transform(VitisBuild(fpga_part, period_ns, platform))
+		self.dataflow_model = self.dataflow_model.transform(MakePYNQDriver("alveo"))
+		
+		if (model_name) is not None:
+			self.dataflow_model.save('.'.join(model_name.split('.')[:-1]) + '_synth.onnx')
+		else:
+			self.dataflow_model.save(('.'.join(self.model_name.split('.')[:-1]) + '_synth.onnx'))
+		
+		deployment_dir = make_build_dir(prefix="pynq_deployment_")
+		self.dataflow_model.set_metadata_prop("pynq_deployment_dir", deployment_dir)
+
+		# get and copy necessary files
+		# .bit and .hwh file
+		bitfile = self.dataflow_model.get_metadata_prop("bitfile")
+		hwh_file = self.dataflow_model.get_metadata_prop("hw_handoff")
+		deploy_files = [bitfile, hwh_file]
+
+		for dfile in deploy_files:
+			if dfile is not None:
+				copy(dfile, deployment_dir)
+
+		# driver.py and python libraries
+		pynq_driver_dir = self.dataflow_model.get_metadata_prop("pynq_driver_dir")
+		copy_tree(pynq_driver_dir, deployment_dir)
