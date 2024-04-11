@@ -431,6 +431,15 @@ class Quantizer(object):
                                     quant_identity_map=quant_identity_map,
                                     quant_act_map=quant_act_map,
                                     unsigned_act_tuple=unsigned_act_tuple)
+                    else:
+                        output_quant_handler(
+                        model,
+                        node,
+                        rewriters,
+                        is_sign_preserving=isinstance(module, SIGN_PRESERVING_MODULES),
+                        quant_identity_map=quant_identity_map,
+                        quant_act_map=quant_act_map,
+                        unsigned_act_tuple=unsigned_act_tuple)
                     if layer_map[type(module)] is not None:
                         quant_module_class, quant_module_kwargs = layer_map[type(module)]
                         quant_module_kwargs['weight_bit_width'] = weight_bit_width
@@ -463,4 +472,16 @@ class Quantizer(object):
         model.train(training_state)
         config.IGNORE_MISSING_KEYS = ignore_missing_keys_state
 
+        return model
+    
+    def finalize(self,
+                 model):
+        ignore_missing_keys_state = config.IGNORE_MISSING_KEYS
+        config.IGNORE_MISSING_KEYS = True
+        training_state = model.training
+        model.eval()
+        model = DisableLastReturnQuantTensor().apply(model)
+
+        model.train(training_state)
+        config.IGNORE_MISSING_KEYS = ignore_missing_keys_state
         return model

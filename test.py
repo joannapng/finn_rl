@@ -100,6 +100,7 @@ def main():
         model_config = get_model_config(args.model_name, args.custom_model_name)
         center_crop_shape = model_config['center_crop_shape']
         img_shape = center_crop_shape
+        print(img_shape)
         device, dtype = next(model.parameters()).device, next(model.parameters()).dtype
         ref_input = torch.ones(1, 1, img_shape, img_shape, device = device, dtype = dtype)
 

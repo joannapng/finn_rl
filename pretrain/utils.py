@@ -4,8 +4,8 @@ def get_model_config(model_name, custom_model_name):
     config = dict()
     # Set-up config parameters
     if custom_model_name is not None:
-        input_shape = 32
-        resize_shape = 32
+        input_shape = 28
+        resize_shape = 28
         config['inception_preprocessing'] = False
     else:
         # parameters for imagenet

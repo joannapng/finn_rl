@@ -104,8 +104,9 @@ class ModelEnv(gym.Env):
 
         # if model is not already preprocessed for quantization
         if not rebuild:
+            # TODO check sizes
             self.model = preprocess_for_quantize(self.model)
-            _, params, size_params, size_activations = measure_model(self.model, 32, 32, self.finetuner.in_channels, quant_strategy = None, bias_quant = 32) # measure feature maps for each model
+            _, params, size_params, size_activations = measure_model(self.model, 28, 28, self.finetuner.in_channels, quant_strategy = None, bias_quant = 32) # measure feature maps for each model
         
         self.quantizable_idx = []
         self.layer_types = []
@@ -246,6 +247,7 @@ class ModelEnv(gym.Env):
 
         # finetune only after all layers have been quantized
         if self.is_final_layer():
+            self.quantizer.finalize(self.model)
             self.finetuner.validate()
             self.finetuner.init_finetuning_optim()
             self.finetuner.init_loss()

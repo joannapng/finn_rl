@@ -4,7 +4,7 @@ import torch.nn as nn
 class LeNet5(nn.Module):
     def __init__(self, num_classes, in_channels):
         super(LeNet5, self).__init__()
-        self.conv1 = nn.Conv2d(in_channels, 6, kernel_size=5, stride=1, padding=0)
+        self.conv1 = nn.Conv2d(in_channels, 6, kernel_size=5, stride=1, padding=2)
         self.bn1 = nn.BatchNorm2d(6)
         self.relu1 = nn.ReLU()
         self.maxpool1 = nn.MaxPool2d(kernel_size=2, stride=2)

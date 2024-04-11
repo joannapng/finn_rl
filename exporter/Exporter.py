@@ -111,6 +111,7 @@ class Exporter:
 			self.model = ModelWrapper(model_name)
 
 		self.model = self.model.transform(InsertTopK(k=1))
+		self.tidy_up(store = False)
 	
 		if (model_name) is not None:
 			self.model.save('.'.join(model_name.split('.')[:-1]) + '_post.onnx')
@@ -136,7 +137,9 @@ class Exporter:
 		round_transformations = [getattr(round, transformation) for transformation in dir(round) if transformation.startswith('Round')]
 		sign_transformations = [getattr(sign, transformation) for transformation in dir(sign) if transformation.startswith('Convert')]
 
-		self.streamlining_transformations = transformations + reorder_transformations + absorb_transformations + collapse_transformations + round_transformations + sign_transformations
+		self.streamlining_transformations = transformations + reorder_transformations + \
+			absorb_transformations + collapse_transformations + round_transformations + \
+			sign_transformations
 		
 		model_was_changed = True
 		while model_was_changed:
@@ -196,7 +199,7 @@ class Exporter:
 				model_was_changed = True
 			
 			self.tidy_up(store = False)
-
+		
 		if (model_name) is not None:
 			self.model.save('.'.join(model_name.split('.')[:-1]) + '_hls.onnx')
 		else:
@@ -228,7 +231,7 @@ class Exporter:
 		if (model_name is not None):
 			self.dataflow_model = ModelWrapper(model_name)
 		
-		model = copy.deepcopy(self.dataflow_model)
+		model = deepcopy(self.dataflow_model)
 
 		model = model.transform(InsertDWC())
 		model = model.transform(SpecializeLayers())
@@ -253,7 +256,7 @@ class Exporter:
 		model = model.transform(GiveUniqueNodeNames())
 		model = model.transform(GiveReadableTensorNames())
 
-		self.dataflow_model = copy.deepcopy(model)
+		self.dataflow_model = deepcopy(model)
 
 	def set_folding(self, model_name = None, platform = "U250", optimizer = "annealing", period_ns = 10):
 		if model_name is not None:
@@ -283,7 +286,7 @@ class Exporter:
 			can_split = False
 			for i in range(len(opt.network.partitions)):
 				valid_splits = opt.network.valid_splits(i)
-				network_copy = copy.deepcopy(opt.network)
+				network_copy = deepcopy(opt.network)
 				if valid_splits:
 					can_split = True
 					prev = opt.network.check_constraints()

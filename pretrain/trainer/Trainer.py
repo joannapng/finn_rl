@@ -90,8 +90,8 @@ class Trainer(object):
             self.in_channels = 1
         
             transformations = transforms.Compose([
-                transforms.Resize(32),
-                transforms.CenterCrop(32),
+                transforms.Resize(28),
+                transforms.CenterCrop(28),
                 transforms.ToTensor(),
                 normalize
             ])
