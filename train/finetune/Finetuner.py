@@ -205,7 +205,7 @@ class Finetuner(object):
                     self.finetuning_optimizer.zero_grad()
                     loss.backward()
                     self.finetuning_optimizer.step()
-                    
+
                     if i % self.args.print_every == 0:
                         print("Epoch: [{}/{}], Step: [{}/{}], Loss: {:.4f}"
                             .format(epoch, self.finetuning_epochs, i, num_steps, loss))

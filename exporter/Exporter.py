@@ -7,6 +7,7 @@ import os
 
 from qonnx.core.modelwrapper import ModelWrapper
 from qonnx.util.cleanup import cleanup_model
+from qonnx.util.cleanup import cleanup
 from qonnx.transformation.infer_shapes import InferShapes
 from qonnx.transformation.fold_constants import FoldConstants
 from qonnx.transformation.infer_datatypes import InferDataTypes
@@ -46,6 +47,12 @@ from qonnx.custom_op.registry import getCustomOp
 
 from finn.transformation.fpgadataflow.make_pynq_driver import MakePYNQDriver
 from finn.util.basic import make_build_dir
+
+from finn.util.pytorch import ToTensor
+from brevitas.export import export_qonnx
+from qonnx.transformation.merge_onnx_models import MergeONNXModels
+import torch
+from qonnx.core.datatype import DataType
 build_dir = os.environ["FINN_BUILD_DIR"]
 
 from samo.backend.finn import parser
@@ -104,6 +111,31 @@ class Exporter:
 		
 		print('\033[1;32mFinished tidy up transformations\033[1;0m')
 
+	def pre_processing(self, model_name = None):
+		print('\033[1;32mBeginning pre-processing transformations\033[1;0m')
+		if (model_name is not None):
+			self.model = ModelWrapper(model_name)
+
+		input_name = self.model.graph.input[0].name
+		input_shape = self.model.get_tensor_shape(input_name)
+		totensor_transformation = ToTensor()
+		preproc_name = '.'.join(self.model_name.split('.')[:-1]) + '_preproc.onnx'
+		export_qonnx(totensor_transformation, torch.randn(input_shape), preproc_name, opset_version=9)
+		cleanup(preproc_name, out_file = preproc_name)
+		pre_model = ModelWrapper(preproc_name)
+		pre_model = pre_model.transform(ConvertQONNXtoFINN())
+
+		self.model = self.model.transform(MergeONNXModels(pre_model))
+		input_name = self.model.graph.input[0].name
+		#self.model.set_tensor_datatype(input_name, DataType["UINT8"])
+
+		if (model_name) is not None:
+			self.model.save('.'.join(model_name.split('.')[:-1]) + '_pre.onnx')
+		else:
+			self.model.save(('.'.join(self.model_name.split('.')[:-1]) + '_pre.onnx'))
+
+		print('\033[1;32mFinished pre-processing transformations\033[1;0m')
+	
 	def post_processing(self, model_name = None):
 		print('\033[1;32mBeginning post-processing transformations\033[1;0m')
 

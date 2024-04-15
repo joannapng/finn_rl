@@ -266,7 +266,7 @@ class Trainer(object):
                     self.training_optimizer.zero_grad()
                     loss.backward()
                     self.training_optimizer.step()
-                    
+
                     if i % self.args.print_every == 0:
                         self.logger.log.info("Epoch: [{}/{}], Step: [{}/{}], Loss: {:.4f}"
                             .format(epoch, self.training_epochs, i, num_steps, loss))

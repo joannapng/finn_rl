@@ -1,4 +1,7 @@
 import torchvision
+import torch
+import torch.nn as nn
+import torch.nn.init as init
 
 def get_model_config(model_name, custom_model_name):
     config = dict()
