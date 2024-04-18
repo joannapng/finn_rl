@@ -1,18 +1,90 @@
+import os
 import argparse
-from exporter import Exporter
+import onnx
+import onnx.numpy_helper as nph
+import torch
+import numpy as np
+import finn.builder.build_dataflow as build
+import finn.builder.build_dataflow_config as build_cfg
+from finn.util.basic import part_map, alveo_default_platform
+from finn.util.test import get_example_input
+from qonnx.core.modelwrapper import ModelWrapper
+
+build_dir = os.environ['FINN_HOST_BUILD_DIR']
 
 parser = argparse.ArgumentParser(description = 'Transform input onnx model to hw')
+parser.add_argument('--brevitas-model', required = True, type = str, help = 'Brevitas model for verification simulation')
 parser.add_argument('--onnx-model', required = True, type = str, help = 'QONNX model to transform using FINN Compiler')
+parser.add_argument('--output-dir', required = False, default = '', type = None, help = 'Output directory')
+parser.add_argument('--synth-clock-period-ns', type = float, default = 10.0, help = 'Target clock period in ns')
+parser.add_argument('--board', default = "U250", help = "Name of target board")
+parser.add_argument('--shell-flow-type', default = "vitis_alveo", choices = ["vivado_zynq", "vitis_alveo"], help = "Target shell type")
+parser.add_argument('--target-fps', type = int, default = 100000, help = 'Target fps')
+parser.add_argument('--dataset', default = "MNIST", choices = ["MNIST", "CIFAR10"], help = 'Dataset')
+
+input_map = {
+	"MNIST": "fc",
+	"CIFAR10": "cnv"
+}
 
 def main():
 	args = parser.parse_args()
+	output_dir = build_dir + "/" + args.output_dir
 
-	exporter = Exporter(args.onnx_model)
-	
-	steps = [exporter.tidy_up, exporter.pre_processing, exporter.post_processing, exporter.streamline, exporter.hls_conversion, exporter.create_dataflow_partition, exporter.set_folding, exporter.insert_fifos, exporter.generate_hw]
+	model = ModelWrapper(args.onnx_model)
+	model_brevitas = 
+	input_tensor = get_example_input(input_map[args.dataset])
+	input_brevitas = torch.from_numpy(nph.to_array(input_tensor).copy()).float()
+	output_golden = 
 
-	for step in steps:
-		step()
+	cfg_build = build.DataflowBuildConfig(
+		output_dir = output_dir,
+		synth_clock_period_ns = args.synth_clock_period_ns,
+		mvau_wwidth_max = 128,
+		board = args.board,
+		shell_flow_type = args.shell_flow_type,
+		fpga_part = part_map[args.board],
+		vitis_platform = alveo_default_platform[args.board],
+		steps = [
+			"step_qonnx_to_finn",
+			"step_tidy_up",
+			"step_streamline",
+			"step_convert_to_hw",
+			"step_create_dataflow_partition",
+			"step_specialize_layers",
+			"step_target_fps_parallelization",
+			"step_apply_folding_config"
+			"step_generate_estimate_reports",
+			"step_minimize_bit_width",
+			"step_hw_codegen",
+			"step_hw_ipgen",
+			"step_set_fifo_depths",
+			"step_create_stitched_ip",
+			"step_measure_rtlsim_performance",
+			"step_make_pynq_driver",
+			"step_out_of_context_synthesis",
+			"step_synthesize_bitfile",
+			"step_deployment_package"
+		],
+		generate_outputs = [
+			build_cfg.DataflowOutputType.ESTIMATE_REPORTS,
+			build_cfg.DataflowOutputType.STITCHED_IP,
+			build_cfg.DataflowOutputType.RTLSIM_PERFORMANCE,
+			build_cfg.DataflowOutputType.OOC_SYNTH,
+			build_cfg.DataflowOutputType.BITFILE,
+			build_cfg.DataflowOutputType.PYNQ_DRIVER,
+			build_cfg.DataflowOutputType.DEPLOYMENT_PACKAGE,
+		],
+		verify_steps = [
+			build_cfg.VerificationStepType.QONNX_TO_FINN_PYTHON,
+			build_cfg.VerificationStepType.TIDY_UP_PYTHON,
+			build_cfg.VerificationStepType.STREAMLINED_PYTHON,
+			build_cfg.VerificationStepType.FOLDED_HLS_CPPSIM,
+			build_cfg.VerificationStepType.STITCHED_IP_RTLSIM
+		]
+	)
+
+	build.build_dataflow_cfg(args.onnx_model, cfg_build)
 
 if __name__ == "__main__":
 	main()
