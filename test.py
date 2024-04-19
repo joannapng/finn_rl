@@ -1,3 +1,5 @@
+import onnx
+import onnx.numpy_helper as nph
 import argparse
 import torch
 import torchvision
@@ -9,6 +11,22 @@ from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.results_plotter import load_results, ts2xy, plot_results
 from stable_baselines3.common.noise import NormalActionNoise
 from stable_baselines3 import DDPG
+from pkgutil import get_data
+
+def get_example_input(dataset):
+    # TODO: do something different here
+    "Get example numpy input tensor for given dataset."
+
+    if dataset == "MNIST":
+        raw_i = get_data("qonnx.data", "onnx/mnist-conv/test_data_set_0/input_0.pb")
+        onnx_tensor = onnx.load_tensor_from_string(raw_i)
+        return nph.to_array(onnx_tensor)
+    elif dataset == "CIFAR10":
+        input_tensor = np.load("./data/cifar10-test-data-class3.npz")["arr_0"].astype(np.float32)
+        return input_tensor
+    else:
+        raise Exception("Unknown dataset, can't return example input")
+    
 
 model_names = sorted(name for name in torchvision.models.__dict__ if name.islower() and not name.startswith("__") and
                      callable(torchvision.models.__dict__[name]) and not name.startswith("get_"))
@@ -75,43 +93,48 @@ parser.add_argument('--min-bit', type=int, default=1, help = 'Minimum bit width 
 parser.add_argument('--max-bit', type=int, default=8, help = 'Maximum bit width (default: 8)')
 
 ### ----- AGENT ------ ###
-parser.add_argument('--num_agents', default = 5, type = int, help = 'Number of agents')
+#parser.add_argument('--num-agents', default = 5, type = int, help = 'Number of agents')
 
 def main():
     args = parser.parse_args()
-    envs = []
-    agents = []
-    weights = [[0.9, 0.1], [0.75, 0.25], [0.5, 0.5], [0.25, 0.75], [0.1, 0.9]] # do not use 0 because obviously 1-bit for the area part
+    weights = [[0.5, 0.5]]
 
-    for i in range(args.num_agents):
-        envs.append(Monitor(ModelEnv(args, np.array(weights[i]), get_model_config(args.model_name, args.custom_model_name)), f'agent_{weights[i][0]}_{weights[i][1]}'))
-        agents.append(DDPG("MlpPolicy", envs[-1], action_noise = None, verbose = 1))
-    
-    for i, agent in enumerate(agents):
-        rl_model = agent.load("agents/agent_{}_{}".format(weights[i][0], weights[i][1]))
-        env = envs[i]
-        done = False
-        obs, _ = envs[i].reset()
-        while not done:
-            action, _states = rl_model.predict(obs)
-            obs, rewards, done, _, info = env.step(action)
-        
-        model = env.model
-        model_config = get_model_config(args.model_name, args.custom_model_name)
-        center_crop_shape = model_config['center_crop_shape']
-        img_shape = center_crop_shape
-        print(img_shape)
-        device, dtype = next(model.parameters()).device, next(model.parameters()).dtype
-        ref_input = torch.ones(1, 1, img_shape, img_shape, device = device, dtype = dtype)
+    env = Monitor(ModelEnv(args, np.array(weights[0]), get_model_config(args.model_name, args.custom_model_name)), f'agent_{weights[0][0]}_{weights[0][1]}')
+    agent = DDPG("MlpPolicy", env, action_noise = None, verbose = 1)
 
-        # export original model to onnx
-        orig_model = env.orig_model
-        orig_model.eval()
-        name = f'model_{weights[i][0]}_{weights[i][1]}.onnx'
-        torch.onnx.export(orig_model, ref_input, name, export_params = False, opset_version = 9)
-        # export quant model to qonnx
-        name = f'model_{weights[i][0]}_{weights[i][1]}_quant.onnx'
-        bo.export_qonnx(model, ref_input, export_path = name, opset_version=9)
+    rl_model = agent.load("agents/agent_{}_{}".format(weights[0][0], weights[0][1]))
+    done = False
+    obs, _ = env.reset()
+    while not done:
+        action, _states = rl_model.predict(obs)
+        obs, rewards, done, _, info = env.step(action)
     
+    model = env.model
+    model = model.eval()
+    input_tensor_npy = get_example_input(args.dataset)
+    input_tensor_torch = torch.from_numpy(input_tensor_npy).float()
+    input_tensor_torch /= 255
+    input_tensor_torch = input_tensor_torch.detach().to(env.finetuner.device)
+    np.save("input.npy", input_tensor_npy)
+
+    output_golden = model.forward(input_tensor_torch).detach().cpu().numpy()
+    output_golden = np.flip(output_golden.flatten().argsort())[:1]
+    np.save("expected_output.npy", output_golden)
+
+    model_config = get_model_config(args.model_name, args.custom_model_name)
+    center_crop_shape = model_config['center_crop_shape']
+    img_shape = center_crop_shape
+    device, dtype = next(model.parameters()).device, next(model.parameters()).dtype
+    ref_input = torch.ones(1, 1, img_shape, img_shape, device = device, dtype = dtype)
+
+    # export original model to onnx
+    orig_model = env.orig_model
+    orig_model.eval()
+    name = f'model_{weights[0][0]}_{weights[0][1]}.onnx'
+    torch.onnx.export(orig_model, ref_input, name, export_params = False, opset_version = 9)
+    # export quant model to qonnx
+    name = f'model_{weights[0][0]}_{weights[0][1]}_quant.onnx'
+    bo.export_qonnx(model, ref_input, export_path = name, opset_version=9)
+
 if __name__ == "__main__":
     main()

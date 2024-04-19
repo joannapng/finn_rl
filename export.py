@@ -7,39 +7,25 @@ import numpy as np
 import finn.builder.build_dataflow as build
 import finn.builder.build_dataflow_config as build_cfg
 from finn.util.basic import part_map, alveo_default_platform
-from finn.util.test import get_example_input
-from qonnx.core.modelwrapper import ModelWrapper
 
-build_dir = os.environ['FINN_HOST_BUILD_DIR']
+build_dir = os.environ['FINN_BUILD_DIR']
 
 parser = argparse.ArgumentParser(description = 'Transform input onnx model to hw')
-parser.add_argument('--brevitas-model', required = True, type = str, help = 'Brevitas model for verification simulation')
 parser.add_argument('--onnx-model', required = True, type = str, help = 'QONNX model to transform using FINN Compiler')
 parser.add_argument('--output-dir', required = False, default = '', type = None, help = 'Output directory')
-parser.add_argument('--synth-clock-period-ns', type = float, default = 10.0, help = 'Target clock period in ns')
+parser.add_argument('--synth-clk-period-ns', type = float, default = 10.0, help = 'Target clock period in ns')
 parser.add_argument('--board', default = "U250", help = "Name of target board")
 parser.add_argument('--shell-flow-type', default = "vitis_alveo", choices = ["vivado_zynq", "vitis_alveo"], help = "Target shell type")
 parser.add_argument('--target-fps', type = int, default = 100000, help = 'Target fps')
 parser.add_argument('--dataset', default = "MNIST", choices = ["MNIST", "CIFAR10"], help = 'Dataset')
 
-input_map = {
-	"MNIST": "fc",
-	"CIFAR10": "cnv"
-}
-
 def main():
 	args = parser.parse_args()
 	output_dir = build_dir + "/" + args.output_dir
 
-	model = ModelWrapper(args.onnx_model)
-	model_brevitas = 
-	input_tensor = get_example_input(input_map[args.dataset])
-	input_brevitas = torch.from_numpy(nph.to_array(input_tensor).copy()).float()
-	output_golden = 
-
 	cfg_build = build.DataflowBuildConfig(
 		output_dir = output_dir,
-		synth_clock_period_ns = args.synth_clock_period_ns,
+		synth_clk_period_ns = args.synth_clk_period_ns,
 		mvau_wwidth_max = 128,
 		board = args.board,
 		shell_flow_type = args.shell_flow_type,
@@ -53,7 +39,7 @@ def main():
 			"step_create_dataflow_partition",
 			"step_specialize_layers",
 			"step_target_fps_parallelization",
-			"step_apply_folding_config"
+			"step_apply_folding_config",
 			"step_generate_estimate_reports",
 			"step_minimize_bit_width",
 			"step_hw_codegen",

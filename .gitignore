@@ -7,3 +7,5 @@ models/*
 agents/*
 *.csv
 *.onnx
+*.pth
+*.pkl
