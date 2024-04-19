@@ -13,21 +13,6 @@ from stable_baselines3.common.noise import NormalActionNoise
 from stable_baselines3 import DDPG
 from pkgutil import get_data
 
-def get_example_input(dataset):
-    # TODO: do something different here
-    "Get example numpy input tensor for given dataset."
-
-    if dataset == "MNIST":
-        raw_i = get_data("qonnx.data", "onnx/mnist-conv/test_data_set_0/input_0.pb")
-        onnx_tensor = onnx.load_tensor_from_string(raw_i)
-        return nph.to_array(onnx_tensor)
-    elif dataset == "CIFAR10":
-        input_tensor = np.load("./data/cifar10-test-data-class3.npz")["arr_0"].astype(np.float32)
-        return input_tensor
-    else:
-        raise Exception("Unknown dataset, can't return example input")
-    
-
 model_names = sorted(name for name in torchvision.models.__dict__ if name.islower() and not name.startswith("__") and
                      callable(torchvision.models.__dict__[name]) and not name.startswith("get_"))
 
@@ -67,8 +52,8 @@ parser.add_argument('--device', default = 'GPU', help = 'Device for training')
 
 ### ----- QUANTIZATION PARAMETERS ----- ###
 parser.add_argument('--scale-factor-type', default='float_scale', choices=['float_scale', 'po2_scale'], help = 'Type for scale factors (default: float)')
-parser.add_argument('--act-bit-width', default=8, type=int, help = 'Activations bit width (default: 32)')
-parser.add_argument('--weight-bit-width', default=8, type=int, help = 'Weight bit width (default: 32)')
+parser.add_argument('--act-bit-width', default=8, type=int, help = 'Activations bit width (default: 8)')
+parser.add_argument('--weight-bit-width', default=8, type=int, help = 'Weight bit width (default: 8)')
 parser.add_argument('--bias-bit-width', default=32, choices=[32, 16], help = 'Bias bit width (default: 32)')
 parser.add_argument('--act-quant-type', default='sym', choices=['sym', 'asym'], help = 'Activation quantization type (default: sym)')
 parser.add_argument('--weight-quant-type', default = 'sym', choices = ['sym', 'asym'], help = 'Weight quantization type (default: sym)')
@@ -83,9 +68,10 @@ parser.add_argument('--learned-round-lr', default = 1e-3, type = float, help = '
 parser.add_argument('--scaling-per-output-channel', default=True, action = 'store_true', help = 'Weight Scaling per output channel (default: enabled)')
 parser.add_argument('--bias-corr', default=True, action = 'store_true', help = 'Bias correction after calibration (default: enabled)')
 parser.add_argument('--graph-eq-merge-bias', default = True, action = 'store_true', help = 'Merge bias when performing graph equaltion (default: enabled)')
-parser.add_argument('--weight-narrow-range', default=True, help = 'Narrow range for weight quantization (default: enabled)')
+parser.add_argument('--weight-narrow-range', default=False, help = 'Narrow range for weight quantization (default: enabled)')
 parser.add_argument('--gpfq-p', default=1.0, type=float, help='P parameter for GPFQ (default: 1.0)')
 parser.add_argument('--quant-format', default = 'int', choices = ['int', 'float'], help = 'Quantization format to use for weights and activations (default: int)')
+parser.add_argument('--merge-bn', default = True, help = 'Merge BN layers before quantizing the model (default: enabled)')
 
 # TODO: add parameters for float quantization
 # TODO: add PTQ extra steps
@@ -111,9 +97,13 @@ def main():
     
     model = env.model
     model = model.eval()
-    input_tensor_npy = get_example_input(args.dataset)
-    input_tensor_torch = torch.from_numpy(input_tensor_npy).float()
-    input_tensor_torch /= 255
+
+    model_config = get_model_config(args.model_name, args.custom_model_name)
+    center_crop_shape = model_config['center_crop_shape']
+    img_shape = center_crop_shape
+
+    input_tensor_npy = (255 * np.random.random(size = (1, 1, img_shape, img_shape))).astype(np.uint8).astype(np.float32)
+    input_tensor_torch = torch.from_numpy(input_tensor_npy).float() / 255.0
     input_tensor_torch = input_tensor_torch.detach().to(env.finetuner.device)
     np.save("input.npy", input_tensor_npy)
 
@@ -121,20 +111,17 @@ def main():
     output_golden = np.flip(output_golden.flatten().argsort())[:1]
     np.save("expected_output.npy", output_golden)
 
-    model_config = get_model_config(args.model_name, args.custom_model_name)
-    center_crop_shape = model_config['center_crop_shape']
-    img_shape = center_crop_shape
     device, dtype = next(model.parameters()).device, next(model.parameters()).dtype
-    ref_input = torch.ones(1, 1, img_shape, img_shape, device = device, dtype = dtype)
+    ref_input = torch.randn(1, 1, img_shape, img_shape, device = device, dtype = dtype)
 
     # export original model to onnx
     orig_model = env.orig_model
     orig_model.eval()
     name = f'model_{weights[0][0]}_{weights[0][1]}.onnx'
-    torch.onnx.export(orig_model, ref_input, name, export_params = False, opset_version = 9)
+    torch.onnx.export(orig_model, ref_input, name, export_params = False, opset_version = 11)
     # export quant model to qonnx
     name = f'model_{weights[0][0]}_{weights[0][1]}_quant.onnx'
-    bo.export_qonnx(model, ref_input, export_path = name, opset_version=9)
+    bo.export_qonnx(model, ref_input, export_path = name, opset_version = 11)
 
 if __name__ == "__main__":
     main()

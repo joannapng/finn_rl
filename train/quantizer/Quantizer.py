@@ -51,6 +51,10 @@ from brevitas.quant.shifted_scaled_int import ShiftedUint8WeightPerTensorFloatMS
 
 from brevitas.graph.standardize import DisableLastReturnQuantTensor
 from brevitas.graph.quantize_impl import SIGN_PRESERVING_MODULES
+from brevitas.core.restrict_val import RestrictValueType
+from brevitas.core.scaling import ScalingImplType
+
+from brevitas_examples.bnn_pynq.models.common import CommonActQuant
 
 BIAS_BIT_WIDTH_MAP = {32: Int32Bias, 16: Int16Bias, None: None}
 UNSIGNED_ACT_TUPLE = (nn.ReLU, nn.ReLU6, nn.Sigmoid, nn.Hardsigmoid)
@@ -300,12 +304,19 @@ class Quantizer(object):
     
     def quantize_input(self,
                         model):
-        input_quantizer = self.quantize_kwargs['quant_identity_map'].get('signed', None)
+        
         ignore_missing_keys_state = config.IGNORE_MISSING_KEYS
         config.IGNORE_MISSING_KEYS = True
         training_state = model.training
         model.eval()
 
+        input_quantizer = (qnn.QuantIdentity, {'act_quant' : CommonActQuant,
+                                               'bit_width' : 8,
+                                               'min_val' : -1.0,
+                                               'max_val' : 1.0 - 2.0 ** (-7),
+                                               'narrow_range' : False,
+                                               'scaling_impl_type' : ScalingImplType.CONST})
+        
         model = inp_placeholder_handler(model, input_quantizer)
 
         #model = DisableLastReturnQuantTensor().apply(model)
@@ -402,6 +413,7 @@ class Quantizer(object):
     def quantize_layer(self,
                        model,
                        layer_idx,
+                       is_final_layer,
                        weight_bit_width):
         
         ignore_missing_keys_state = config.IGNORE_MISSING_KEYS
@@ -420,26 +432,28 @@ class Quantizer(object):
             if node.op == 'call_module' and i == layer_idx:
                 module = get_module(model, node.target)
                 if isinstance(module, tuple(layer_map.keys())):
-                    if len(node.users) > 1 and all(['getitem' in n.name for n in node.users]):
-                        for n in node.users:
-                            if len(n.users) > 0:
-                                output_quant_handler(
-                                    model,
-                                    n,
-                                    rewriters,
-                                    is_sign_preserving=isinstance(module, SIGN_PRESERVING_MODULES),
-                                    quant_identity_map=quant_identity_map,
-                                    quant_act_map=quant_act_map,
-                                    unsigned_act_tuple=unsigned_act_tuple)
-                    else:
-                        output_quant_handler(
-                        model,
-                        node,
-                        rewriters,
-                        is_sign_preserving=isinstance(module, SIGN_PRESERVING_MODULES),
-                        quant_identity_map=quant_identity_map,
-                        quant_act_map=quant_act_map,
-                        unsigned_act_tuple=unsigned_act_tuple)
+                    # do not insert output quantizer in final layer
+                    if not is_final_layer:
+                        if len(node.users) > 1 and all(['getitem' in n.name for n in node.users]):
+                            for n in node.users:
+                                if len(n.users) > 0:
+                                    output_quant_handler(
+                                        model,
+                                        n,
+                                        rewriters,
+                                        is_sign_preserving=isinstance(module, SIGN_PRESERVING_MODULES),
+                                        quant_identity_map=quant_identity_map,
+                                        quant_act_map=quant_act_map,
+                                        unsigned_act_tuple=unsigned_act_tuple)
+                        else:
+                            output_quant_handler(
+                            model,
+                            node,
+                            rewriters,
+                            is_sign_preserving=isinstance(module, SIGN_PRESERVING_MODULES),
+                            quant_identity_map=quant_identity_map,
+                            quant_act_map=quant_act_map,
+                            unsigned_act_tuple=unsigned_act_tuple)
                     if layer_map[type(module)] is not None:
                         quant_module_class, quant_module_kwargs = layer_map[type(module)]
                         quant_module_kwargs['weight_bit_width'] = weight_bit_width
@@ -480,7 +494,8 @@ class Quantizer(object):
         config.IGNORE_MISSING_KEYS = True
         training_state = model.training
         model.eval()
-        model = DisableLastReturnQuantTensor().apply(model)
+
+        #model = DisableLastReturnQuantTensor().apply(model)
 
         model.train(training_state)
         config.IGNORE_MISSING_KEYS = ignore_missing_keys_state

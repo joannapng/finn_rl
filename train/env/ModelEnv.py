@@ -8,6 +8,7 @@ from enum import IntEnum
 
 from brevitas.graph.utils import get_module
 from brevitas.graph.quantize import preprocess_for_quantize
+from brevitas_examples.imagenet_classification.ptq.ptq_common import apply_bias_correction
 import brevitas.nn as qnn
 
 from ..quantizer import Quantizer
@@ -105,7 +106,10 @@ class ModelEnv(gym.Env):
         # if model is not already preprocessed for quantization
         if not rebuild:
             # TODO check sizes
-            self.model = preprocess_for_quantize(self.model)
+            self.model = preprocess_for_quantize(self.model,
+                                                 equalize_merge_bias = self.args.graph_eq_merge_bias,
+                                                 equalize_iters = self.args.graph_eq_iterations, 
+                                                 merge_bn = self.args.merge_bn)
             _, params, size_params, size_activations = measure_model(self.model, 28, 28, self.finetuner.in_channels, quant_strategy = None, bias_quant = 32) # measure feature maps for each model
         
         self.quantizable_idx = []
@@ -192,8 +196,12 @@ class ModelEnv(gym.Env):
         super().reset(seed = seed)
 
         self.model = copy.deepcopy(self.orig_model).to(self.finetuner.device)
-        self.model = preprocess_for_quantize(self.model)
-        self.model = self.quantizer.quantize_input(self.model)
+        self.model = preprocess_for_quantize(self.model,
+                                            equalize_merge_bias = self.args.graph_eq_merge_bias,
+                                            equalize_iters = self.args.graph_eq_iterations, 
+                                            merge_bn = self.args.merge_bn)
+        
+        #self.model = self.quantizer.quantize_input(self.model)
         self.build_index(rebuild=True)
         self.model.to(self.finetuner.device)
 
@@ -236,6 +244,7 @@ class ModelEnv(gym.Env):
         if self.cur_ind >= self.num_quant_acts:
             self.model = self.quantizer.quantize_layer(self.model, 
                                                        self.index_to_quantize, 
+                                                       self.is_final_layer(),
                                                        int(action[0]))
             # build index again, because quanize layers can insert quantizers
             self.build_index(rebuild = True)
@@ -253,6 +262,9 @@ class ModelEnv(gym.Env):
             self.finetuner.init_loss()
             self.finetuner.finetune()
         
+            if self.args.bias_corr:
+                apply_bias_correction(self.finetuner.calib_loader, self.model)
+
         acc = self.finetuner.validate()
 
         self.action_running_mean = ((action[0]) / (self.max_bit) + (self.cur_ind) * self.action_running_mean) / (self.cur_ind + 1)

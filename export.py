@@ -8,10 +8,15 @@ import finn.builder.build_dataflow as build
 import finn.builder.build_dataflow_config as build_cfg
 from finn.util.basic import part_map, alveo_default_platform
 from finn.util.pytorch import ToTensor
+from finn.transformation.qonnx.convert_qonnx_to_finn import ConvertQONNXtoFINN
+from onnx import version_converter
+
 from qonnx.transformation.merge_onnx_models import MergeONNXModels
 from qonnx.transformation.insert_topk import InsertTopK
 from qonnx.core.modelwrapper import ModelWrapper
 from qonnx.core.datatype import DataType
+from qonnx.util.cleanup import cleanup as qonnx_cleanup
+
 from brevitas.export import export_qonnx
 
 build_dir = os.environ['FINN_BUILD_DIR']
@@ -29,10 +34,14 @@ parser.add_argument('--dataset', default = "MNIST", choices = ["MNIST", "CIFAR10
 def preprocessing(model: ModelWrapper, cfg: build.DataflowBuildConfig):
 	input_shape = model.get_tensor_shape(model.graph.input[0].name)
 	preproc = ToTensor()
-	export_qonnx(preproc, torch.randn(input_shape), "preproc.onnx", opset_version = 9)
+	export_qonnx(preproc, torch.randn(input_shape), "preproc.onnx", opset_version = 11)
+	qonnx_cleanup("preproc.onnx", out_file = "preproc.onnx")
 	preproc_model = ModelWrapper("preproc.onnx")
-	preproc_model.set_tensor_datatype(preproc_model.graph.input[0].name, DataType["UINT8"])
+	preproc_model = preproc_model.transform(ConvertQONNXtoFINN())
+
 	model = model.transform(MergeONNXModels(preproc_model))
+	global_inp_name = model.graph.input[0].name
+	model.set_tensor_datatype(global_inp_name, DataType["UINT8"])
 	return model
 
 def postprocessing(model: ModelWrapper, cfg: build.DataflowBuildConfig):
@@ -84,9 +93,9 @@ def main():
 			build_cfg.DataflowOutputType.DEPLOYMENT_PACKAGE,
 		],
 		verify_steps = [
-			#build_cfg.VerificationStepType.QONNX_TO_FINN_PYTHON,
-			#build_cfg.VerificationStepType.TIDY_UP_PYTHON,
-			#build_cfg.VerificationStepType.STREAMLINED_PYTHON,
+			build_cfg.VerificationStepType.QONNX_TO_FINN_PYTHON,
+			build_cfg.VerificationStepType.TIDY_UP_PYTHON,
+			build_cfg.VerificationStepType.STREAMLINED_PYTHON,
 			build_cfg.VerificationStepType.FOLDED_HLS_CPPSIM,
 			build_cfg.VerificationStepType.STITCHED_IP_RTLSIM
 		]
