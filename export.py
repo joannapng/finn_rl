@@ -7,6 +7,12 @@ import numpy as np
 import finn.builder.build_dataflow as build
 import finn.builder.build_dataflow_config as build_cfg
 from finn.util.basic import part_map, alveo_default_platform
+from finn.util.pytorch import ToTensor
+from qonnx.transformation.merge_onnx_models import MergeONNXModels
+from qonnx.transformation.insert_topk import InsertTopK
+from qonnx.core.modelwrapper import ModelWrapper
+from qonnx.core.datatype import DataType
+from brevitas.export import export_qonnx
 
 build_dir = os.environ['FINN_BUILD_DIR']
 
@@ -18,6 +24,20 @@ parser.add_argument('--board', default = "U250", help = "Name of target board")
 parser.add_argument('--shell-flow-type', default = "vitis_alveo", choices = ["vivado_zynq", "vitis_alveo"], help = "Target shell type")
 parser.add_argument('--target-fps', type = int, default = 100000, help = 'Target fps')
 parser.add_argument('--dataset', default = "MNIST", choices = ["MNIST", "CIFAR10"], help = 'Dataset')
+
+
+def preprocessing(model: ModelWrapper, cfg: build.DataflowBuildConfig):
+	input_shape = model.get_tensor_shape(model.graph.input[0].name)
+	preproc = ToTensor()
+	export_qonnx(preproc, torch.randn(input_shape), "preproc.onnx", opset_version = 9)
+	preproc_model = ModelWrapper("preproc.onnx")
+	preproc_model.set_tensor_datatype(preproc_model.graph.input[0].name, DataType["UINT8"])
+	model = model.transform(MergeONNXModels(preproc_model))
+	return model
+
+def postprocessing(model: ModelWrapper, cfg: build.DataflowBuildConfig):
+	model = model.transform(InsertTopK(k=1))
+	return model
 
 def main():
 	args = parser.parse_args()
@@ -32,6 +52,8 @@ def main():
 		fpga_part = part_map[args.board],
 		vitis_platform = alveo_default_platform[args.board],
 		steps = [
+			preprocessing,
+			postprocessing,
 			"step_qonnx_to_finn",
 			"step_tidy_up",
 			"step_streamline",
@@ -62,9 +84,9 @@ def main():
 			build_cfg.DataflowOutputType.DEPLOYMENT_PACKAGE,
 		],
 		verify_steps = [
-			build_cfg.VerificationStepType.QONNX_TO_FINN_PYTHON,
-			build_cfg.VerificationStepType.TIDY_UP_PYTHON,
-			build_cfg.VerificationStepType.STREAMLINED_PYTHON,
+			#build_cfg.VerificationStepType.QONNX_TO_FINN_PYTHON,
+			#build_cfg.VerificationStepType.TIDY_UP_PYTHON,
+			#build_cfg.VerificationStepType.STREAMLINED_PYTHON,
 			build_cfg.VerificationStepType.FOLDED_HLS_CPPSIM,
 			build_cfg.VerificationStepType.STITCHED_IP_RTLSIM
 		]

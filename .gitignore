@@ -9,3 +9,5 @@ agents/*
 *.onnx
 *.pth
 *.pkl
+checkpoints/*
+*.npy
