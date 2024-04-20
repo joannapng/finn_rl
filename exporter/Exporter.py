@@ -1,3 +1,4 @@
+from operator import contains
 import torch
 import finn.builder.build_dataflow as build
 import finn.builder.build_dataflow_config as build_cfg
@@ -23,6 +24,11 @@ from qonnx.transformation.make_input_chanlast import MakeInputChannelsLast
 from qonnx.transformation.quant_constant_folding import FoldTransposeIntoQuantInit
 from qonnx.transformation.remove import RemoveIdentityOps
 from qonnx.transformation.infer_data_layouts import InferDataLayouts
+
+from qonnx.transformation.infer_shapes import InferShapes
+from qonnx.transformation.fold_constants import FoldConstants
+from qonnx.transformation.infer_datatypes import InferDataTypes
+from qonnx.transformation.general import GiveReadableTensorNames, GiveUniqueNodeNames, RemoveStaticGraphInputs
 
 from finn.transformation.move_reshape import RemoveCNVtoFCFlatten
 
@@ -65,7 +71,8 @@ def streamline(model: ModelWrapper, cfg: build.DataflowBuildConfig):
 	
 	absorb_transformations = [getattr(absorb, transformation) for transformation in dir(absorb) if transformation.startswith('Absorb')]
 	collapse_transformations = [getattr(collapse, transformation) for transformation in dir(collapse) if transformation.startswith('Collapse') and transformation != 'CollapseRepeatedOp']
-	reorder_transformations = [getattr(reorder, transformation) for transformation in dir(reorder) if (transformation.startswith('Make') or transformation.startswith('Move')) and transformation != 'MoveOpPastFork' and transformation != 'MoveIdenticalOpPastJoinOp']
+	reorder_transformations = [getattr(reorder, transformation) for transformation in dir(reorder) if (transformation.startswith('Make') or transformation.startswith('Move')) \
+							and transformation != 'MoveOpPastFork' and transformation != 'MoveIdenticalOpPastJoinOp']
 	round_transformations = [getattr(round, transformation) for transformation in dir(round) if transformation.startswith('Round')]
 	sign_transformations = [getattr(sign, transformation) for transformation in dir(sign) if transformation.startswith('Convert')]
 	
@@ -79,15 +86,17 @@ def streamline(model: ModelWrapper, cfg: build.DataflowBuildConfig):
 		model_was_changed = False
 		for transformation in streamlining_transformations:
 			model = model.transform(transformation())
-			print(transformation)
-			print(model.get_tensor_shape(model.graph.input[0].name))
 			model = model.transform(Streamline())
 		
 		if (prev_model.model != model.model):
 			model_was_changed = True
 		
-		# do not infer datalayouts, because it assumes NHWC
-		model = model.transform(RemoveUnusedTensors())
+		model = model.transform(InferShapes())
+		model = model.transform(FoldConstants())
+		model = model.transform(GiveUniqueNodeNames())
+		model = model.transform(GiveReadableTensorNames())
+		model = model.transform(InferDataTypes())
+		model = model.transform(RemoveStaticGraphInputs())
 
 	if VerificationStepType.STREAMLINED_PYTHON in cfg._resolve_verification_steps():
 		verify_step(model, cfg, "streamlined_python", need_parent=False)
@@ -102,7 +111,8 @@ def convert_to_hw(model: ModelWrapper, cfg: build.DataflowBuildConfig):
 	
 	absorb_transformations = [getattr(absorb, transformation) for transformation in dir(absorb) if transformation.startswith('Absorb')]
 	collapse_transformations = [getattr(collapse, transformation) for transformation in dir(collapse) if transformation.startswith('Collapse') and transformation != 'CollapseRepeatedOp']
-	reorder_transformations = [getattr(reorder, transformation) for transformation in dir(reorder) if (transformation.startswith('Make') or transformation.startswith('Move')) and transformation != 'MoveOpPastFork' and transformation != 'MoveIdenticalOpPastJoinOp']
+	reorder_transformations = [getattr(reorder, transformation) for transformation in dir(reorder) if (transformation.startswith('Make') or transformation.startswith('Move')) \
+							and transformation != 'MoveOpPastFork' and transformation != 'MoveIdenticalOpPastJoinOp']
 	round_transformations = [getattr(round, transformation) for transformation in dir(round) if transformation.startswith('Round')]
 	sign_transformations = [getattr(sign, transformation) for transformation in dir(sign) if transformation.startswith('Convert')]
 	
@@ -127,9 +137,11 @@ def convert_to_hw(model: ModelWrapper, cfg: build.DataflowBuildConfig):
 		if (prev_model.model != model.model):
 			model_was_changed = True
 		
+		model = model.transform(InferShapes())
+		model = model.transform(FoldConstants())
 		model = model.transform(GiveUniqueNodeNames())
-
-	if VerificationStepType.STREAMLINED_PYTHON in cfg._resolve_verification_steps():
-		verify_step(model, cfg, "streamlined_python", need_parent=False)
+		model = model.transform(GiveReadableTensorNames())
+		model = model.transform(InferDataTypes())
+		model = model.transform(RemoveStaticGraphInputs())
 	
 	return model
