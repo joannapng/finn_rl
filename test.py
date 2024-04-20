@@ -83,7 +83,7 @@ parser.add_argument('--max-bit', type=int, default=8, help = 'Maximum bit width 
 
 def main():
     args = parser.parse_args()
-    weights = [[0.5, 0.5]]
+    weights = [[1.0, 0.0]]
 
     env = Monitor(ModelEnv(args, np.array(weights[0]), get_model_config(args.model_name, args.custom_model_name)), f'agent_{weights[0][0]}_{weights[0][1]}')
     agent = DDPG("MlpPolicy", env, action_noise = None, verbose = 1)

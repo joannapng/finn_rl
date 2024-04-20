@@ -80,18 +80,18 @@ parser.add_argument('--min-bit', type=int, default=1, help = 'Minimum bit width 
 parser.add_argument('--max-bit', type=int, default=8, help = 'Maximum bit width (default: 8)')
 
 ### ----- AGENT ------ ###
-parser.add_argument('--num_agents', default = 5, type = int, help = 'Number of agents')
+parser.add_argument('--num-agents', default = 5, type = int, help = 'Number of agents')
 parser.add_argument('--agent', default = 'TD3', choices = ['A2C', 'DDPG', 'PPO', 'SAC', 'TD3'], help = 'Choose algorithm to train agent')
 parser.add_argument('--noise', default = 0.1, type = float, help = 'Std for added noise in agent')
-parser.add_argument('--num_episodes', default = 100, type = int, help = 'Number of episodes (passes over the entire network) to train the agent for')
+parser.add_argument('--num-episodes', default = 100, type = int, help = 'Number of episodes (passes over the entire network) to train the agent for')
 parser.add_argument('--log_every', default = 10, type = int, help = 'How many episodes to wait to log agent')
 
 def get_weights(num_agents):
     weights = []
 
     for i in range(num_agents):
-        w1 = i * 0.1
-        w2 = 1 - w1
+        w2 = i * 0.1
+        w1 = 1 - w2
         weights.append([w1, w2])
     
     return weights
