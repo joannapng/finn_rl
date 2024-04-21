@@ -37,8 +37,8 @@ def main():
 		vitis_platform = alveo_default_platform[args.board],
 		steps = [
 			preprocessing,
-			"step_tidy_up",
 			postprocessing,
+			"step_tidy_up",
 			"step_qonnx_to_finn",
 			"step_tidy_up",
 			streamline,

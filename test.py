@@ -112,7 +112,7 @@ def main():
     np.save("input.npy", input_tensor_npy)
 
     output_golden = model.forward(input_tensor_torch).detach().cpu().numpy()
-    print(output_golden)    
+    print(output_golden)
     output_golden = np.flip(output_golden.flatten().argsort())[:1]
     print(output_golden)
     np.save("expected_output.npy", output_golden)
@@ -124,10 +124,10 @@ def main():
     orig_model = env.orig_model
     orig_model.eval()
     name = f'model_{weights[0][0]}_{weights[0][1]}.onnx'
-    torch.onnx.export(orig_model, ref_input, name, export_params = False, opset_version = 11)
+    torch.onnx.export(orig_model, ref_input, name, export_params = False, opset_version=11)
     # export quant model to qonnx
     name = f'model_{weights[0][0]}_{weights[0][1]}_quant.onnx'
-    bo.export_qonnx(model, ref_input, export_path = name, opset_version = 11)
+    bo.export_qonnx(model, ref_input, export_path = name, keep_initializers_as_inputs = False, opset_version=11)
 
 if __name__ == "__main__":
     main()

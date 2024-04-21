@@ -9,11 +9,11 @@ class Simple(nn.Module):
 		self.conv_features = ModuleList()
 		self.linear_features = ModuleList()
 
-		self.conv_features.append(nn.Conv2d(1, 1, 5, padding = 2))
+		self.conv_features.append(nn.Conv2d(1, 1, 5, padding = 2, bias = False))
 		self.conv_features.append(nn.ReLU())
 		self.conv_features.append(nn.MaxPool2d(kernel_size = 4, stride = 4))
 
-		self.linear_features.append(nn.Linear(7 * 7 , num_classes))
+		self.linear_features.append(nn.Linear(7 * 7 , num_classes, bias = False))
 		self.name = "Simple"
 
 	def forward(self, x):

@@ -211,7 +211,7 @@ class Quantizer(object):
         act_bit_width_dict = {'bit_width': act_bit_width}
 
         #bias_quant = BIAS_BIT_WIDTH_MAP[bias_bit_width] if act_bit_width is not None else None
-        bias_quant = Int8Bias # if I set it to 8 bias the checks fail???? 
+        bias_quant = None
         weight_quant = WEIGHT_QUANT_MAP[weight_quant_format][weight_scale_type][weight_param_method][weight_quant_granularity][weight_quant_type]
         weight_quant = weight_quant.let(**weight_bit_width_dict)
 
