@@ -11,10 +11,11 @@ from torchvision import transforms
 from torchvision.datasets import CIFAR10, MNIST
 import torchvision.models
 from ..logger import Logger
-from ..models import LeNet5
+from ..models import LeNet5, Simple
 from ..utils import *
 
-networks = {'LeNet5' : LeNet5}
+networks = {'LeNet5' : LeNet5,
+            'Simple' : Simple}
 
 class Trainer(object):
     def __init__(self, args, model_config):
@@ -93,7 +94,7 @@ class Trainer(object):
                 transforms.Resize(28),
                 transforms.CenterCrop(28),
                 transforms.ToTensor(),
-                normalize
+                #normalize
             ])
         else:
             # for imagenet

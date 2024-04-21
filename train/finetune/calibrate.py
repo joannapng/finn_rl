@@ -5,8 +5,6 @@ from brevitas.graph.calibrate import calibration_mode
 
 def calibrate(args, model, calib_loader):
     # Setup calibration dataloaders
-
-    model.eval()
     dtype = next(model.parameters()).dtype
     device = next(model.parameters()).device
     with torch.no_grad():

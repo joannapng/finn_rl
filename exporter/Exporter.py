@@ -17,7 +17,6 @@ from qonnx.transformation.change_3d_tensors_to_4d import Change3DTo4DTensors
 from qonnx.transformation.change_datalayout import ChangeDataLayoutQuantAvgPool2d
 from qonnx.transformation.channels_last import AbsorbChanFirstIntoMatMul
 from qonnx.transformation.extract_conv_bias import ExtractBiasFromConv
-from qonnx.transformation.gemm_to_matmul import GemmToMatMul
 from qonnx.transformation.general import ConvertDivToMul, ConvertSubToAdd, GiveUniqueNodeNames, RemoveUnusedTensors
 from qonnx.transformation.lower_convs_to_matmul import LowerConvsToMatMul
 from qonnx.transformation.make_input_chanlast import MakeInputChannelsLast
@@ -57,16 +56,28 @@ def preprocessing(model: ModelWrapper, cfg: build.DataflowBuildConfig):
 	model = model.transform(MergeONNXModels(preproc_model))
 	global_inp_name = model.graph.input[0].name
 	model.set_tensor_datatype(global_inp_name, DataType["UINT8"])
+	model = model.transform(InferShapes())
+	model = model.transform(FoldConstants())
+	model = model.transform(GiveUniqueNodeNames())
+	model = model.transform(GiveReadableTensorNames())
+	model = model.transform(InferDataTypes())
+	model = model.transform(RemoveStaticGraphInputs())
 	return model
 
 def postprocessing(model: ModelWrapper, cfg: build.DataflowBuildConfig):
 	model = model.transform(InsertTopK(k=1))
+	model = model.transform(InferShapes())
+	model = model.transform(FoldConstants())
+	model = model.transform(GiveUniqueNodeNames())
+	model = model.transform(GiveReadableTensorNames())
+	model = model.transform(InferDataTypes())
+	model = model.transform(RemoveStaticGraphInputs())
 	return model
 
 def streamline(model: ModelWrapper, cfg: build.DataflowBuildConfig):
 	transformations = [BatchNormToAffine, ConvertBipolarMatMulToXnorPopcount, Change3DTo4DTensors, ChangeDataLayoutQuantAvgPool2d, 
-					 AbsorbChanFirstIntoMatMul, ExtractBiasFromConv, GemmToMatMul, ConvertDivToMul, 
-					 ConvertSubToAdd, LowerConvsToMatMul, MakeInputChannelsLast,
+					 AbsorbChanFirstIntoMatMul, ExtractBiasFromConv, ConvertDivToMul, 
+					 ConvertSubToAdd, LowerConvsToMatMul,
 					 FoldTransposeIntoQuantInit, RemoveIdentityOps, RemoveCNVtoFCFlatten]
 	
 	absorb_transformations = [getattr(absorb, transformation) for transformation in dir(absorb) if transformation.startswith('Absorb')]
@@ -76,8 +87,8 @@ def streamline(model: ModelWrapper, cfg: build.DataflowBuildConfig):
 	round_transformations = [getattr(round, transformation) for transformation in dir(round) if transformation.startswith('Round')]
 	sign_transformations = [getattr(sign, transformation) for transformation in dir(sign) if transformation.startswith('Convert')]
 	
-	streamlining_transformations = transformations + reorder_transformations + \
-			absorb_transformations + collapse_transformations + round_transformations + \
+	streamlining_transformations = transformations + absorb_transformations + reorder_transformations + \
+			collapse_transformations + round_transformations + \
 			sign_transformations
 		
 	model_was_changed = True
@@ -85,6 +96,7 @@ def streamline(model: ModelWrapper, cfg: build.DataflowBuildConfig):
 		prev_model = deepcopy(model)
 		model_was_changed = False
 		for transformation in streamlining_transformations:
+			print(transformation)
 			model = model.transform(transformation())
 			model = model.transform(Streamline())
 		
@@ -105,8 +117,8 @@ def streamline(model: ModelWrapper, cfg: build.DataflowBuildConfig):
 
 def convert_to_hw(model: ModelWrapper, cfg: build.DataflowBuildConfig):
 	transformations = [BatchNormToAffine, ConvertBipolarMatMulToXnorPopcount, Change3DTo4DTensors, ChangeDataLayoutQuantAvgPool2d, 
-					 AbsorbChanFirstIntoMatMul, ExtractBiasFromConv, GemmToMatMul, ConvertDivToMul, 
-					 ConvertSubToAdd, LowerConvsToMatMul, MakeInputChannelsLast,
+					 AbsorbChanFirstIntoMatMul, ExtractBiasFromConv, ConvertDivToMul, 
+					 ConvertSubToAdd, LowerConvsToMatMul,
 					 FoldTransposeIntoQuantInit, RemoveIdentityOps, RemoveCNVtoFCFlatten]
 	
 	absorb_transformations = [getattr(absorb, transformation) for transformation in dir(absorb) if transformation.startswith('Absorb')]
@@ -116,8 +128,8 @@ def convert_to_hw(model: ModelWrapper, cfg: build.DataflowBuildConfig):
 	round_transformations = [getattr(round, transformation) for transformation in dir(round) if transformation.startswith('Round')]
 	sign_transformations = [getattr(sign, transformation) for transformation in dir(sign) if transformation.startswith('Convert')]
 	
-	streamlining_transformations = transformations + reorder_transformations + \
-			absorb_transformations + collapse_transformations + round_transformations + \
+	streamlining_transformations = transformations + absorb_transformations + reorder_transformations + \
+			collapse_transformations + round_transformations + \
 			sign_transformations
 	
 	hls_transformations = [getattr(convert, transformation) for transformation in dir(convert) if transformation.startswith('Infer')]
@@ -128,9 +140,11 @@ def convert_to_hw(model: ModelWrapper, cfg: build.DataflowBuildConfig):
 		model_was_changed = False
 
 		for transformation in hls_transformations:
+			print(transformation)
 			model = model.transform(transformation())
 		
 		for transformation in streamlining_transformations:
+			print(transformation)
 			model = model.transform(transformation())
 			model = model.transform(Streamline())
 		

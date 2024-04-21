@@ -17,9 +17,11 @@ import torchvision.models
 from .validate import validate
 from .calibrate import calibrate
 from pretrain.models.LeNet5 import LeNet5
+from pretrain.models.Simple import Simple
 from pretrain.utils import get_torchvision_model
 
-networks = {'LeNet5' : LeNet5}
+networks = {'LeNet5' : LeNet5,
+            'Simple' : Simple}
 
 class Finetuner(object):
     def __init__(self, args, model_config):
@@ -87,7 +89,7 @@ class Finetuner(object):
                 transforms.Resize(28),
                 transforms.CenterCrop(28),
                 transforms.ToTensor(),
-                normalize
+                #normalize
             ])
         else:
             # for imagenet

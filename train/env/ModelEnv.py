@@ -252,19 +252,21 @@ class ModelEnv(gym.Env):
         self.finetuner.model = self.model
         self.finetuner.model.to(self.finetuner.device)
 
-        self.finetuner.calibrate()
-
         # finetune only after all layers have been quantized
         if self.is_final_layer():
             self.quantizer.finalize(self.model)
+            self.finetuner.model = self.model
+            self.finetuner.model.to(self.finetuner.device)
+            self.finetuner.calibrate()
+
+            if self.args.bias_corr:
+                apply_bias_correction(self.finetuner.calib_loader, self.model)
+
             self.finetuner.validate()
             self.finetuner.init_finetuning_optim()
             self.finetuner.init_loss()
             self.finetuner.finetune()
         
-            if self.args.bias_corr:
-                apply_bias_correction(self.finetuner.calib_loader, self.model)
-
         acc = self.finetuner.validate()
 
         self.action_running_mean = ((action[0]) / (self.max_bit) + (self.cur_ind) * self.action_running_mean) / (self.cur_ind + 1)

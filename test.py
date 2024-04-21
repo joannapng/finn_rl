@@ -1,9 +1,12 @@
+from pkgutil import get_data
 import onnx
 import onnx.numpy_helper as nph
-import argparse
 import torch
 import torchvision
 import numpy as np
+import argparse
+from brevitas.graph.utils import get_module
+
 from train.env import ModelEnv
 from pretrain.utils import get_model_config
 import brevitas.onnx as bo
@@ -11,7 +14,6 @@ from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.results_plotter import load_results, ts2xy, plot_results
 from stable_baselines3.common.noise import NormalActionNoise
 from stable_baselines3 import DDPG
-from pkgutil import get_data
 
 model_names = sorted(name for name in torchvision.models.__dict__ if name.islower() and not name.startswith("__") and
                      callable(torchvision.models.__dict__[name]) and not name.startswith("get_"))
@@ -102,13 +104,17 @@ def main():
     center_crop_shape = model_config['center_crop_shape']
     img_shape = center_crop_shape
 
-    input_tensor_npy = (255 * np.random.random(size = (1, 1, img_shape, img_shape))).astype(np.uint8).astype(np.float32)
+    raw_i = get_data("qonnx.data", "onnx/mnist-conv/test_data_set_0/input_0.pb")
+    input_tensor = onnx.load_tensor_from_string(raw_i)
+    input_tensor_npy = nph.to_array(input_tensor).copy()
     input_tensor_torch = torch.from_numpy(input_tensor_npy).float() / 255.0
     input_tensor_torch = input_tensor_torch.detach().to(env.finetuner.device)
     np.save("input.npy", input_tensor_npy)
 
     output_golden = model.forward(input_tensor_torch).detach().cpu().numpy()
+    print(output_golden)    
     output_golden = np.flip(output_golden.flatten().argsort())[:1]
+    print(output_golden)
     np.save("expected_output.npy", output_golden)
 
     device, dtype = next(model.parameters()).device, next(model.parameters()).dtype

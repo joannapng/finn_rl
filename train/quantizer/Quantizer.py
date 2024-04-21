@@ -1,3 +1,4 @@
+from pickle import TRUE
 import torch.nn as nn
 import brevitas
 import brevitas.nn as qnn
@@ -41,6 +42,7 @@ from brevitas.quant.scaled_int import Int8WeightPerTensorFloat
 from brevitas.quant.scaled_int import Int8WeightPerTensorFloatMSE
 from brevitas.quant.scaled_int import Int16Bias
 from brevitas.quant.scaled_int import Int32Bias
+from brevitas.quant.scaled_int import Int8Bias
 from brevitas.quant.shifted_scaled_int import ShiftedUint8ActPerTensorFixedPoint
 from brevitas.quant.shifted_scaled_int import ShiftedUint8ActPerTensorFloat
 from brevitas.quant.shifted_scaled_int import ShiftedUint8ActPerTensorFloatMSE
@@ -208,8 +210,8 @@ class Quantizer(object):
         weight_bit_width_dict = {'bit_width' : weight_bit_width}
         act_bit_width_dict = {'bit_width': act_bit_width}
 
-        bias_quant = BIAS_BIT_WIDTH_MAP[bias_bit_width] if act_bit_width is not None else None
-        #bias_quant = None
+        #bias_quant = BIAS_BIT_WIDTH_MAP[bias_bit_width] if act_bit_width is not None else None
+        bias_quant = Int8Bias # if I set it to 8 bias the checks fail???? 
         weight_quant = WEIGHT_QUANT_MAP[weight_quant_format][weight_scale_type][weight_param_method][weight_quant_granularity][weight_quant_type]
         weight_quant = weight_quant.let(**weight_bit_width_dict)
 
@@ -230,7 +232,8 @@ class Quantizer(object):
         # TODO: if weight quantization is symmetric
         act_quant = act_quant.let(
             **{
-                'high_percentile_q': act_quant_percentile, 'dtype' : torch.float32
+                'high_percentile_q': act_quant_percentile, 'dtype' : torch.float32,
+                'scaling_imp': ParameterFromStatsFromParameterScaling
             }
         )
 
@@ -342,13 +345,13 @@ class Quantizer(object):
                     quant_module_class, quant_module_kwargs = layer_map[type(module)]
                     quant_module_kwargs['bit_width'] = act_bit_width
                     quant_module = quant_module_class(**quant_module_kwargs)
-
+                
                     if len(node.users) == 1:
                         user_node = list(node.users.keys())[0]
                         if user_node.name.endswith('act_eq_mul'):
                             act_module = quant_module.act_quant.fused_activation_quant_proxy.activation_impl
                             mul_module = get_module(model, user_node.target)
-                            quant_module.act_quant.fused_activation_quant_proxy.activation_impl = torch.nn.Sequantial(
+                            quant_module.act_quant.fused_activation_quant_proxy.activation_impl = torch.nn.Sequential(
                                  *[act_module, mul_module]
                             )
                             user_node.replace_all_uses_with(node)
@@ -432,28 +435,26 @@ class Quantizer(object):
             if node.op == 'call_module' and i == layer_idx:
                 module = get_module(model, node.target)
                 if isinstance(module, tuple(layer_map.keys())):
-                    # do not insert output quantizer in final layer
-                    if not is_final_layer:
-                        if len(node.users) > 1 and all(['getitem' in n.name for n in node.users]):
-                            for n in node.users:
-                                if len(n.users) > 0:
-                                    output_quant_handler(
-                                        model,
-                                        n,
-                                        rewriters,
-                                        is_sign_preserving=isinstance(module, SIGN_PRESERVING_MODULES),
-                                        quant_identity_map=quant_identity_map,
-                                        quant_act_map=quant_act_map,
-                                        unsigned_act_tuple=unsigned_act_tuple)
-                        else:
-                            output_quant_handler(
-                            model,
-                            node,
-                            rewriters,
-                            is_sign_preserving=isinstance(module, SIGN_PRESERVING_MODULES),
-                            quant_identity_map=quant_identity_map,
-                            quant_act_map=quant_act_map,
-                            unsigned_act_tuple=unsigned_act_tuple)
+                    if len(node.users) > 1 and all(['getitem' in n.name for n in node.users]):
+                        for n in node.users:
+                            if len(n.users) > 0:
+                                output_quant_handler(
+                                    model,
+                                    n,
+                                    rewriters,
+                                    is_sign_preserving=isinstance(module, SIGN_PRESERVING_MODULES),
+                                    quant_identity_map=quant_identity_map,
+                                    quant_act_map=quant_act_map,
+                                    unsigned_act_tuple=unsigned_act_tuple)
+                    else:
+                        output_quant_handler(
+                        model,
+                        node,
+                        rewriters,
+                        is_sign_preserving=isinstance(module, SIGN_PRESERVING_MODULES),
+                        quant_identity_map=quant_identity_map,
+                        quant_act_map=quant_act_map,
+                        unsigned_act_tuple=unsigned_act_tuple)
                     if layer_map[type(module)] is not None:
                         quant_module_class, quant_module_kwargs = layer_map[type(module)]
                         quant_module_kwargs['weight_bit_width'] = weight_bit_width
@@ -495,7 +496,7 @@ class Quantizer(object):
         training_state = model.training
         model.eval()
 
-        #model = DisableLastReturnQuantTensor().apply(model)
+        model = DisableLastReturnQuantTensor().apply(model)
 
         model.train(training_state)
         config.IGNORE_MISSING_KEYS = ignore_missing_keys_state
