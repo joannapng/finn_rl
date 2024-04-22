@@ -4,7 +4,7 @@ import onnx
 import onnx.numpy_helper as nph
 import torch
 import numpy as np
-from exporter.Exporter import preprocessing, postprocessing, streamline, convert_to_hw, set_folding, insert_fifos, generate_hw
+from exporter.Exporter import preprocessing, postprocessing, streamline, convert_to_hw, name_nodes
 import finn.builder.build_dataflow as build
 import finn.builder.build_dataflow_config as build_cfg
 from finn.util.basic import part_map, alveo_default_platform
@@ -45,9 +45,20 @@ def main():
 			convert_to_hw,
 			"step_create_dataflow_partition",
 			"step_specialize_layers",
-			insert_fifos,
-			set_folding,
-			generate_hw
+			"step_target_fps_parallelization",
+			"step_apply_folding_config",
+			"step_minimize_bit_width",
+			"step_generate_estimate_reports",
+			name_nodes,
+			"step_hw_codegen",
+			"step_hw_ipgen",
+			"step_set_fifo_depths",
+			"step_create_stitched_ip",
+			"step_measure_rtlsim_performance",
+			"step_out_of_context_synthesis",
+			"step_synthesize_bitfile",
+			"step_make_pynq_driver",
+			"step_deployment_package",
 		],
 		generate_outputs = [
 			build_cfg.DataflowOutputType.ESTIMATE_REPORTS,
