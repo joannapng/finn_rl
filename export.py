@@ -30,7 +30,7 @@ def main():
 	cfg_build = build.DataflowBuildConfig(
 		output_dir = output_dir,
 		synth_clk_period_ns = args.synth_clk_period_ns,
-		mvau_wwidth_max = 128,
+		mvau_wwidth_max = 16,
 		board = args.board,
 		shell_flow_type = args.shell_flow_type,
 		fpga_part = part_map[args.board],
@@ -46,6 +46,7 @@ def main():
 			"step_create_dataflow_partition",
 			"step_specialize_layers",
 			"step_target_fps_parallelization",
+			name_nodes,
 			"step_apply_folding_config",
 			"step_minimize_bit_width",
 			"step_generate_estimate_reports",
