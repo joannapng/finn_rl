@@ -76,7 +76,7 @@ parser.add_argument('--gpfq-p', default=1.0, type=float, help='P parameter for G
 parser.add_argument('--quant-format', default = 'int', choices = ['int', 'float'], help = 'Quantization format to use for weights and activations (default: int)')
 parser.add_argument('--merge-bn', default = True, help = 'Merge BN layers before quantizing the model (default: enabled)')
 
-parser.add_argument('--min-bit', type=int, default=1, help = 'Minimum bit width (default: 1)')
+parser.add_argument('--min-bit', type=int, default=6, help = 'Minimum bit width (default: 1)')
 parser.add_argument('--max-bit', type=int, default=8, help = 'Maximum bit width (default: 8)')
 
 ### ----- AGENT ------ ###
@@ -90,7 +90,7 @@ def get_weights(num_agents):
     weights = []
 
     for i in range(num_agents):
-        w2 = i * 0.1
+        w2 = i * 1 / num_agents
         w1 = 1 - w2
         weights.append([w1, w2])
     
@@ -104,7 +104,7 @@ def main():
     weights = get_weights(num_agents)
 
     for i in range(num_agents):
-        env = ModelEnv(args, np.array(weights[i]), get_model_config(args.model_name, args.custom_model_name))
+        env = ModelEnv(args, np.array(weights[i]), get_model_config(args.model_name, args.custom_model_name, args.dataset))
         envs.append(Monitor(env, f'agent_{weights[i][0]}_{weights[i][1]}', info_keywords = ('accuracy',)))
 
         n_actions = envs[-1].action_space.shape[-1]

@@ -6,6 +6,7 @@ import torchvision
 import numpy as np
 import argparse
 from brevitas.graph.utils import get_module
+import importlib_resources as importlib
 
 from train.env import ModelEnv
 from pretrain.utils import get_model_config
@@ -18,7 +19,19 @@ from stable_baselines3 import DDPG
 model_names = sorted(name for name in torchvision.models.__dict__ if name.islower() and not name.startswith("__") and
                      callable(torchvision.models.__dict__[name]) and not name.startswith("get_"))
 
-parser = argparse.ArgumentParser(description = 'Train RL Agents')
+parser = argparse.ArgumentParser(description = 'Test RL Agents')
+
+def get_example_input(dataset):
+    if dataset == "MNIST":
+        raw_i = get_data("qonnx.data", "onnx/mnist-conv/test_data_set_0/input_0.pb")
+        input_tensor = onnx.load_tensor_from_string(raw_i)
+        input_tensor_npy = nph.to_array(input_tensor).copy()
+    elif dataset == "CIFAR10":
+        ref = importlib.files("finn.qnn-data") / "cifar10/cifar10-test-data-class3.npz"
+        with importlib.as_file(ref) as fn:
+            input_tensor_npy = np.load(fn)["arr_0"].astype(np.float32)
+    
+    return input_tensor_npy
 
 ### ----- TARGET MODEL ------ ###
 # Model Parameters
@@ -77,7 +90,7 @@ parser.add_argument('--merge-bn', default = True, help = 'Merge BN layers before
 
 # TODO: add parameters for float quantization
 # TODO: add PTQ extra steps
-parser.add_argument('--min-bit', type=int, default=1, help = 'Minimum bit width (default: 1)')
+parser.add_argument('--min-bit', type=int, default=6, help = 'Minimum bit width (default: 1)')
 parser.add_argument('--max-bit', type=int, default=8, help = 'Maximum bit width (default: 8)')
 
 ### ----- AGENT ------ ###
@@ -87,7 +100,7 @@ def main():
     args = parser.parse_args()
     weights = [[1.0, 0.0]]
 
-    env = Monitor(ModelEnv(args, np.array(weights[0]), get_model_config(args.model_name, args.custom_model_name)), f'agent_{weights[0][0]}_{weights[0][1]}')
+    env = Monitor(ModelEnv(args, np.array(weights[0]), get_model_config(args.model_name, args.custom_model_name, args.dataset)), f'agent_{weights[0][0]}_{weights[0][1]}')
     agent = DDPG("MlpPolicy", env, action_noise = None, verbose = 1)
 
     rl_model = agent.load("agents/agent_{}_{}".format(weights[0][0], weights[0][1]))
@@ -100,13 +113,11 @@ def main():
     model = env.model
     model = model.eval()
 
-    model_config = get_model_config(args.model_name, args.custom_model_name)
+    model_config = get_model_config(args.model_name, args.custom_model_name, args.dataset)
     center_crop_shape = model_config['center_crop_shape']
     img_shape = center_crop_shape
-
-    raw_i = get_data("qonnx.data", "onnx/mnist-conv/test_data_set_0/input_0.pb")
-    input_tensor = onnx.load_tensor_from_string(raw_i)
-    input_tensor_npy = nph.to_array(input_tensor).copy()
+    
+    input_tensor_npy = get_example_input(args.dataset)
     input_tensor_torch = torch.from_numpy(input_tensor_npy).float() / 255.0
     input_tensor_torch = input_tensor_torch.detach().to(env.finetuner.device)
     np.save("input.npy", input_tensor_npy)
@@ -118,7 +129,7 @@ def main():
     np.save("expected_output.npy", output_golden)
 
     device, dtype = next(model.parameters()).device, next(model.parameters()).dtype
-    ref_input = torch.randn(1, 1, img_shape, img_shape, device = device, dtype = dtype)
+    ref_input = torch.randn(1, 3, img_shape, img_shape, device = device, dtype = dtype)
 
     # export original model to onnx
     orig_model = env.orig_model

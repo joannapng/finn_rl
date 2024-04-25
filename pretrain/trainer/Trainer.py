@@ -81,7 +81,7 @@ class Trainer(object):
                 transforms.Resize(32),
                 transforms.CenterCrop(32),
                 transforms.ToTensor(),
-                normalize
+                #normalize
             ])
         elif args.dataset == 'MNIST':
             normalize = transforms.Normalize(mean = (0.1307, ), std = (0.3081, ))

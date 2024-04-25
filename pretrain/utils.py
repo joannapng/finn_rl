@@ -3,8 +3,26 @@ import torch
 import torch.nn as nn
 import torch.nn.init as init
 
-def get_model_config(model_name, custom_model_name):
+def get_model_config(model_name, custom_model_name, dataset):
     config = dict()
+
+    if model_name == 'inception_v3' or model_name == 'googlenet':
+        config['inception_preprocessing'] = True
+    else:
+        config['inception_preprocessing'] = False
+
+    if dataset == "MNIST":
+        input_shape = 28
+        resize_shape = 28
+    elif dataset == "CIFAR10":
+        input_shape = 32
+        resize_shape = 32
+
+    #TODO: ADD FOR IMAGENET
+    config.update({'resize_shape': resize_shape, 'center_crop_shape': input_shape})
+    return config
+
+    '''
     # Set-up config parameters
     if custom_model_name is not None:
         input_shape = 28
@@ -26,6 +44,7 @@ def get_model_config(model_name, custom_model_name):
 
     config.update({'resize_shape': resize_shape, 'center_crop_shape': input_shape})
     return config
+    '''
 
 def get_torchvision_model(model_name, num_classes, device, pretrained=False):
     model_fn = getattr(torchvision.models, model_name)

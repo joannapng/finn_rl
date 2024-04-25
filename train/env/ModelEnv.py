@@ -201,7 +201,7 @@ class ModelEnv(gym.Env):
                                             equalize_iters = self.args.graph_eq_iterations, 
                                             merge_bn = self.args.merge_bn)
         
-        #self.model = self.quantizer.quantize_input(self.model)
+        self.model = self.quantizer.quantize_input(self.model)
         self.build_index(rebuild=True)
         self.model.to(self.finetuner.device)
 

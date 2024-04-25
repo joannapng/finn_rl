@@ -102,7 +102,14 @@ def streamline(model: ModelWrapper, cfg: build.DataflowBuildConfig):
 		prev_model = deepcopy(model)
 		model_was_changed = False
 		for transformation in streamlining_transformations:
+			print(transformation)
+			model = model.transform(GiveUniqueNodeNames())
+			model = model.transform(GiveReadableTensorNames())
+			model.save("model.onnx")
 			model = model.transform(transformation())
+			model = model.transform(GiveUniqueNodeNames())
+			model = model.transform(GiveReadableTensorNames())
+			model.save("model.onnx")
 			model = model.transform(Streamline())
 		
 		if (prev_model.model != model.model):

@@ -47,7 +47,7 @@ parser.add_argument('--device', default = 'GPU', help = 'Device for training')
 
 def main():
     args = parser.parse_args()
-    trainer = Trainer(args, get_model_config(args.model_name, args.custom_model_name))
+    trainer = Trainer(args, get_model_config(args.model_name, args.custom_model_name, args.dataset))
     trainer.train_model()
 
 if __name__ == "__main__":
