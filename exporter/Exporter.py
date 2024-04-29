@@ -6,7 +6,7 @@ import finn.builder.build_dataflow as build
 import finn.builder.build_dataflow_config as build_cfg
 from finn.builder.build_dataflow_config import VerificationStepType
 from finn.builder.build_dataflow_steps import verify_step
-
+from qonnx.transformation.double_to_single_float import DoubleToSingleFloat
 from finn.util.pytorch import ToTensor
 from finn.transformation.qonnx.convert_qonnx_to_finn import ConvertQONNXtoFINN
 from finn.transformation.streamline import Streamline
@@ -20,7 +20,7 @@ from qonnx.transformation.change_3d_tensors_to_4d import Change3DTo4DTensors
 from qonnx.transformation.change_datalayout import ChangeDataLayoutQuantAvgPool2d
 from qonnx.transformation.channels_last import AbsorbChanFirstIntoMatMul
 from qonnx.transformation.extract_conv_bias import ExtractBiasFromConv
-from qonnx.transformation.general import ApplyConfig, ConvertDivToMul, ConvertSubToAdd, GiveUniqueNodeNames, RemoveUnusedTensors
+from qonnx.transformation.general import SortGraph, ConvertDivToMul, ConvertSubToAdd, GiveUniqueNodeNames, RemoveUnusedTensors
 from qonnx.transformation.lower_convs_to_matmul import LowerConvsToMatMul
 from qonnx.transformation.quant_constant_folding import FoldTransposeIntoQuantInit
 from qonnx.transformation.remove import RemoveIdentityOps
@@ -80,6 +80,115 @@ def postprocessing(model: ModelWrapper, cfg: build.DataflowBuildConfig):
 	model = model.transform(RemoveStaticGraphInputs())
 	return model
 
+def step_resnet50_streamline_linear(model: ModelWrapper, cfg: build.DataflowBuildConfig):
+	streamline_transformations = [
+		absorb.AbsorbScalarMulAddIntoTopK(),  # before MoveAddPastMul to avoid int->float
+		absorb.AbsorbSignBiasIntoMultiThreshold(),
+		absorb.AbsorbMulIntoMultiThreshold(),
+		absorb.AbsorbAddIntoMultiThreshold(),
+		ConvertSubToAdd(),
+		ConvertDivToMul(),
+		RemoveIdentityOps(),
+		collapse.CollapseRepeatedMul(),
+		BatchNormToAffine(),
+		sign.ConvertSignToThres(),
+		reorder.MoveAddPastMul(),
+		reorder.MoveScalarAddPastMatMul(),
+		reorder.MoveAddPastConv(),
+		reorder.MoveScalarMulPastMatMul(),
+		reorder.MoveScalarMulPastConv(),
+		reorder.MoveScalarLinearPastInvariants(),
+		reorder.MoveAddPastMul(),
+		collapse.CollapseRepeatedAdd(),
+		collapse.CollapseRepeatedMul(),
+		absorb.FactorOutMulSignMagnitude(),
+		reorder.MoveMaxPoolPastMultiThreshold(),
+		absorb.Absorb1BitMulIntoMatMul(),
+		absorb.Absorb1BitMulIntoConv(),
+		round.RoundAndClipThresholds(),
+	]
+	for trn in streamline_transformations:
+		model = model.transform(trn)
+		model = model.transform(GiveUniqueNodeNames())
+	return model
+
+
+def step_resnet50_streamline_nonlinear(model: ModelWrapper, cfg: build.DataflowBuildConfig):
+	streamline_transformations = [
+		reorder.MoveLinearPastEltwiseAdd(),
+		reorder.MoveLinearPastFork(),
+	]
+	for trn in streamline_transformations:
+		model = model.transform(trn)
+		model = model.transform(GiveUniqueNodeNames())
+	return model
+
+
+def step_resnet50_streamline(model: ModelWrapper, cfg: build.DataflowBuildConfig):
+
+	for iter_id in range(4):
+		model = step_resnet50_streamline_linear(model, cfg)
+		model = step_resnet50_streamline_nonlinear(model, cfg)
+
+		# big loop tidy up
+		model = model.transform(RemoveUnusedTensors())
+		model = model.transform(GiveReadableTensorNames())
+		model = model.transform(InferDataTypes())
+		model = model.transform(SortGraph())
+
+	model = model.transform(DoubleToSingleFloat())
+
+	if VerificationStepType.STREAMLINED_PYTHON in cfg._resolve_verification_steps():
+		verify_step(model, cfg, "streamlined_python", need_parent=False)
+	
+
+	return model
+
+
+def step_resnet50_convert_to_hls(model: ModelWrapper, cfg: build.DataflowBuildConfig):
+	model.set_tensor_datatype(model.graph.input[0].name, DataType["UINT8"])
+	model = model.transform(InferDataLayouts())
+
+	try:
+		from finn.transformation.fpgadataflow.infer_doublepacked_dsp import (
+			InferDoublePackedConv,
+		)
+
+		model = model.transform(InferDoublePackedConv([1]))
+	except Exception:
+		print(" FINN Experimental not available. Using non-packed convolution ")
+
+	model = model.transform(DoubleToSingleFloat())
+	model = model.transform(InferDataTypes())
+	model = model.transform(SortGraph())
+
+	to_hls_transformations = [
+		convert.InferAddStreamsLayer,
+		LowerConvsToMatMul,
+		convert.InferChannelwiseLinearLayer,
+		convert.InferPool,
+		absorb.AbsorbTransposeIntoMultiThreshold,
+		round.RoundAndClipThresholds,
+		convert.InferQuantizedMatrixVectorActivation,
+		convert.InferThresholdingLayer,
+		absorb.AbsorbConsecutiveTransposes,
+		convert.InferConvInpGen,
+		convert.InferDuplicateStreamsLayer,
+		convert.InferLabelSelectLayer,
+	]
+	for trn in to_hls_transformations:
+		model = model.transform(trn())
+		model = model.transform(InferDataLayouts())
+		model = model.transform(GiveUniqueNodeNames())
+		model = model.transform(InferDataTypes())
+
+	model = model.transform(RemoveCNVtoFCFlatten())
+	model = model.transform(GiveReadableTensorNames())
+	model = model.transform(RemoveUnusedTensors())
+	model = model.transform(SortGraph())
+
+	return model
+
 def streamline(model: ModelWrapper, cfg: build.DataflowBuildConfig):
 	transformations = [BatchNormToAffine, ConvertBipolarMatMulToXnorPopcount, Change3DTo4DTensors, ChangeDataLayoutQuantAvgPool2d, 
 					 AbsorbChanFirstIntoMatMul, ExtractBiasFromConv, ConvertDivToMul, 
@@ -89,7 +198,7 @@ def streamline(model: ModelWrapper, cfg: build.DataflowBuildConfig):
 	absorb_transformations = [getattr(absorb, transformation) for transformation in dir(absorb) if transformation.startswith('Absorb')]
 	collapse_transformations = [getattr(collapse, transformation) for transformation in dir(collapse) if transformation.startswith('Collapse') and transformation != 'CollapseRepeatedOp']
 	reorder_transformations = [getattr(reorder, transformation) for transformation in dir(reorder) if (transformation.startswith('Make') or transformation.startswith('Move')) \
-							and transformation != 'MoveOpPastFork' and transformation != 'MoveIdenticalOpPastJoinOp']
+							and transformation != 'MoveOpPastFork' and transformation != 'MoveIdenticalOpPastJoinOp' and transformation != 'MoveScalarLinearPastInvariants']
 	round_transformations = [getattr(round, transformation) for transformation in dir(round) if transformation.startswith('Round')]
 	sign_transformations = [getattr(sign, transformation) for transformation in dir(sign) if transformation.startswith('Convert')]
 	
@@ -99,27 +208,24 @@ def streamline(model: ModelWrapper, cfg: build.DataflowBuildConfig):
 		
 	model_was_changed = True
 	while model_was_changed:
-		prev_model = deepcopy(model)
 		model_was_changed = False
 		for transformation in streamlining_transformations:
-			print(transformation)
-			model = model.transform(GiveUniqueNodeNames())
-			model = model.transform(GiveReadableTensorNames())
-			model.save("model.onnx")
+			old_model = model.model.SerializeToString()
 			model = model.transform(transformation())
+			new_model = model.model.SerializeToString()
+			if model_was_changed == False:
+				model_was_changed = old_model != new_model
+			model = model.transform(RemoveIdentityOps())
 			model = model.transform(GiveUniqueNodeNames())
 			model = model.transform(GiveReadableTensorNames())
-			model.save("model.onnx")
-			model = model.transform(Streamline())
-		
-		if (prev_model.model != model.model):
-			model_was_changed = True
+			model = model.transform(InferDataTypes())
+	
 	
 	model = model.transform(InferDataLayouts())
 	model = model.transform(RemoveUnusedTensors())
 
-	if VerificationStepType.STREAMLINED_PYTHON in cfg._resolve_verification_steps():
-		verify_step(model, cfg, "streamlined_python", need_parent=False)
+	#if VerificationStepType.STREAMLINED_PYTHON in cfg._resolve_verification_steps():
+	#	verify_step(model, cfg, "streamlined_python", need_parent=False)
 	
 	return model
 
@@ -132,7 +238,7 @@ def convert_to_hw(model: ModelWrapper, cfg: build.DataflowBuildConfig):
 	absorb_transformations = [getattr(absorb, transformation) for transformation in dir(absorb) if transformation.startswith('Absorb')]
 	collapse_transformations = [getattr(collapse, transformation) for transformation in dir(collapse) if transformation.startswith('Collapse') and transformation != 'CollapseRepeatedOp']
 	reorder_transformations = [getattr(reorder, transformation) for transformation in dir(reorder) if (transformation.startswith('Make') or transformation.startswith('Move')) \
-							and transformation != 'MoveOpPastFork' and transformation != 'MoveIdenticalOpPastJoinOp']
+							and transformation != 'MoveOpPastFork' and transformation != 'MoveIdenticalOpPastJoinOp' and transformation != 'MoveScalarLinearPastInvariants']
 	round_transformations = [getattr(round, transformation) for transformation in dir(round) if transformation.startswith('Round')]
 	sign_transformations = [getattr(sign, transformation) for transformation in dir(sign) if transformation.startswith('Convert')]
 	
@@ -144,18 +250,27 @@ def convert_to_hw(model: ModelWrapper, cfg: build.DataflowBuildConfig):
 	
 	model_was_changed = True
 	while model_was_changed:
-		prev_model = deepcopy(model)
 		model_was_changed = False
 
 		for transformation in hls_transformations:
+			old_model = model.model.SerializeToString()
+			model = model.transform(transformation())
+			new_model = model.model.SerializeToString()
+			if model_was_changed == False:
+				model_was_changed = old_model != new_model
 			model = model.transform(transformation())
 		
 		for transformation in streamlining_transformations:
+			old_model = model.model.SerializeToString()
 			model = model.transform(transformation())
-			model = model.transform(Streamline())
+			new_model = model.model.SerializeToString()
+			if model_was_changed == False:
+				model_was_changed = old_model != new_model
+			model = model.transform(RemoveIdentityOps())
+			model = model.transform(GiveUniqueNodeNames())
+			model = model.transform(GiveReadableTensorNames())
+			model = model.transform(InferDataTypes())
 		
-		if (prev_model.model != model.model):
-			model_was_changed = True
 
 	model = model.transform(GiveUniqueNodeNames())
 	model = model.transform(GiveReadableTensorNames())

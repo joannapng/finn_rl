@@ -339,7 +339,7 @@ class Quantizer(object):
         if uint_sym_act_for_unsigned_values:
             quant_mha_kwargs['attn_output_weights_signed'] = False
             unsigned_quant_act_kwargs['signed'] = False
-
+        
         quant_layer_map = {
         torch.nn.Linear: (qnn.QuantLinear, quant_wbiol_kwargs),
         torch.nn.MultiheadAttention: (qnn.QuantMultiheadAttention, quant_mha_kwargs),

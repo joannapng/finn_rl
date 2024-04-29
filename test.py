@@ -90,7 +90,7 @@ parser.add_argument('--merge-bn', default = True, help = 'Merge BN layers before
 
 # TODO: add parameters for float quantization
 # TODO: add PTQ extra steps
-parser.add_argument('--min-bit', type=int, default=6, help = 'Minimum bit width (default: 1)')
+parser.add_argument('--min-bit', type=int, default=1, help = 'Minimum bit width (default: 1)')
 parser.add_argument('--max-bit', type=int, default=8, help = 'Maximum bit width (default: 8)')
 
 ### ----- AGENT ------ ###
