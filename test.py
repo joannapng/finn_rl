@@ -120,6 +120,7 @@ def main():
     input_tensor_npy = get_example_input(args.dataset)
     input_tensor_torch = torch.from_numpy(input_tensor_npy).float() / 255.0
     input_tensor_torch = input_tensor_torch.detach().to(env.finetuner.device)
+    input_tensor_npy = np.transpose(input_tensor_npy, (0, 2, 3, 1)) # N, H, W, C
     np.save("input.npy", input_tensor_npy)
 
     output_golden = model.forward(input_tensor_torch).detach().cpu().numpy()
