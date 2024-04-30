@@ -4,7 +4,7 @@ import onnx
 import onnx.numpy_helper as nph
 import torch
 import numpy as np
-from exporter.Exporter import preprocessing, postprocessing, streamline, convert_to_hw, name_nodes, step_resnet50_streamline, step_resnet50_convert_to_hls
+from exporter.Exporter import preprocessing, postprocessing, make_input_channels_last, streamline_resnet, convert_to_hw_resnet, name_nodes
 import finn.builder.build_dataflow as build
 import finn.builder.build_dataflow_config as build_cfg
 from finn.util.basic import part_map, alveo_default_platform
@@ -38,13 +38,12 @@ def main():
 		steps = [
 			preprocessing,
 			postprocessing,
+			make_input_channels_last,
 			"step_tidy_up",
 			"step_qonnx_to_finn",
 			"step_tidy_up",
-			#streamline,
-			#convert_to_hw,
-			step_resnet50_streamline, 
-			step_resnet50_convert_to_hls,
+			streamline_resnet,
+			convert_to_hw_resnet,
 			"step_create_dataflow_partition",
 			"step_specialize_layers",
 			"step_target_fps_parallelization",
