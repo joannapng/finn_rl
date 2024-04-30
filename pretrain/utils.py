@@ -2,6 +2,8 @@ import torchvision
 import torch
 import torch.nn as nn
 import torch.nn.init as init
+from torchvision.models.resnet import BasicBlock, Bottleneck
+from torch import Tensor
 
 def get_model_config(model_name, custom_model_name, dataset):
     config = dict()
@@ -59,3 +61,35 @@ def get_torchvision_model(model_name, num_classes, device, pretrained=False):
         else:
             model = model_fn(num_classes = num_classes)
     return model.to(device)
+
+def add_relu_after_bn():
+    BasicBlock.forward = basic_block_forward
+    '''
+    module_output = module
+    if isinstance(module, nn.BatchNorm2d) and (name == "bn2" or name == "bn3"):
+        module_output = nn.Sequential(module, nn.ReLU())
+    for name, child in module.named_children():
+        module_output.add_module(name, add_relu_after_bn(name, child))
+    del module
+
+    return module_output
+    '''
+
+
+def basic_block_forward(self, x: Tensor) -> Tensor:
+    identity = x
+    out = self.conv1(x)
+    out = self.bn1(out)
+    out = self.relu(out)
+
+    out = self.conv2(out)
+    out = self.bn2(out)
+    out = self.relu(out)
+
+    if self.downsample is not None:
+        identity = self.relu(self.downsample(x))
+
+    out = out + identity
+    out = self.relu(out)
+
+    return out

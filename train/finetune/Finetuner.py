@@ -18,7 +18,8 @@ from .validate import validate
 from .calibrate import calibrate
 from pretrain.models.LeNet5 import LeNet5
 from pretrain.models.Simple import Simple
-from pretrain.utils import get_torchvision_model
+from pretrain.utils import get_torchvision_model, add_relu_after_bn
+from pretrain.trainer.Trainer import resnets
 
 networks = {'LeNet5' : LeNet5,
             'Simple' : Simple}
@@ -146,6 +147,9 @@ class Finetuner(object):
             self.model = builder(num_classes = self.num_classes, in_channels = self.in_channels).to(self.device)
         else:
             self.model = get_torchvision_model(self.args.model_name, self.num_classes, self.device, False)
+
+        if self.args.model_name in resnets:
+            add_relu_after_bn()
 
         print('Loading model from {}'.format(self.args.model_path))
 

@@ -14,6 +14,9 @@ from ..logger import Logger
 from ..models import LeNet5, Simple
 from ..utils import *
 
+resnets = sorted(name for name in torchvision.models.__dict__ if name.islower() and not name.startswith("__") and
+                     callable(torchvision.models.__dict__[name]) and not name.startswith("get_") and "resnet" in name) 
+
 networks = {'LeNet5' : LeNet5,
             'Simple' : Simple}
 
@@ -141,6 +144,9 @@ class Trainer(object):
         else:
             # if model-path is specified, it will be loaded below
             self.model = get_torchvision_model(self.args.model_name, self.num_classes, self.device, self.args.pretrained and self.args.model_path is None)
+
+        if self.args.model_name in resnets:
+            add_relu_after_bn()
 
         if self.args.resume_from is not None and not self.args.pretrained: # resume training from checkpoint
             print('Loading model from checkpoint at: {}'.format(self.args.resume_from))
