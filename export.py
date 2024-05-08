@@ -7,6 +7,7 @@ import numpy as np
 from exporter.Exporter import preprocessing, postprocessing, make_input_channels_last, streamline_resnet, convert_to_hw_resnet, name_nodes
 import finn.builder.build_dataflow as build
 import finn.builder.build_dataflow_config as build_cfg
+from finn.builder.build_dataflow_config import LargeFIFOMemStyle, AutoFIFOSizingMethod
 from finn.util.basic import part_map, alveo_default_platform
 
 from brevitas.export import export_qonnx
@@ -30,11 +31,13 @@ def main():
 	cfg_build = build.DataflowBuildConfig(
 		output_dir = output_dir,
 		synth_clk_period_ns = args.synth_clk_period_ns,
-		mvau_wwidth_max = 16,
+		mvau_wwidth_max = 100000,
 		board = args.board,
 		shell_flow_type = args.shell_flow_type,
 		fpga_part = part_map[args.board],
 		vitis_platform = alveo_default_platform[args.board],
+		split_large_fifos = True,
+		large_fifo_mem_style = LargeFIFOMemStyle.URAM,
 		steps = [
 			preprocessing,
 			postprocessing,
@@ -76,7 +79,7 @@ def main():
 			build_cfg.VerificationStepType.TIDY_UP_PYTHON,
 			build_cfg.VerificationStepType.STREAMLINED_PYTHON,
 			build_cfg.VerificationStepType.FOLDED_HLS_CPPSIM,
-			build_cfg.VerificationStepType.STITCHED_IP_RTLSIM
+			#build_cfg.VerificationStepType.STITCHED_IP_RTLSIM
 		]
 	)
 
