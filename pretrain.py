@@ -19,7 +19,7 @@ parser.add_argument('--resume-from', default = None, help = 'If resume-from is n
 # Dataset Parameters
 parser.add_argument('--datadir', default = './data', help='Directory where datasets are stored')
 parser.add_argument('--dataset', default = 'MNIST', choices = ['MNIST', 'CIFAR10'], help = 'Name of dataset')
-parser.add_argument('--batch-size-training', default = 64, type = int, help = 'Batch size for training')
+parser.add_argument('--batch-size-training', default = 128, type = int, help = 'Batch size for training')
 parser.add_argument('--batch-size-validation', default = 64, type = int, help = 'Batch size for validation')
 parser.add_argument('--num_workers', default = 32, type = int, help = 'Num workers')
 parser.add_argument('--validation-split', default = 0.2, type = float, help = 'Training-Validation split')
@@ -33,10 +33,11 @@ parser.add_argument('--checkpoint_every', default = 10, help = 'How many epochs 
 # Optimizer Parameters
 parser.add_argument('--optimizer', default = 'Adam', choices = ['Adam', 'SGD'], help = 'Optimizer')
 parser.add_argument('--training-lr', default = 0.01, type = float, help = 'Training learning rate')
-parser.add_argument('--weight_decay', default = 0, type = float, help = 'Weight decay for optimizer')
+parser.add_argument('--weight_decay', default = 5e-4, type = float, help = 'Weight decay for optimizer')
+parser.add_argument('--momentum', default = 0.9, type = float, help = 'Value of momentum for optimizer')
 
 # Scheduler Parameters
-parser.add_argument('--scheduler', default = 'StepLR', choices = ['StepLR'], help = 'Learning rate scheduler')
+parser.add_argument('--scheduler', default = 'StepLR', choices = ['StepLR', 'CosineAnnealingLR'], help = 'Learning rate scheduler')
 parser.add_argument('--step_size', default = 50, type = int, help = 'Period of learning decay')
 
 # Loss Parameters

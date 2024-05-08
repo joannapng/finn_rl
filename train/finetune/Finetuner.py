@@ -37,10 +37,8 @@ class Finetuner(object):
         self.test_loader = None
         self.num_classes = None
         self.in_channels = None
-        self.finetuning_split = self.args.finetuning_split
         self.batch_size_finetuning = self.args.batch_size_finetuning
-        self.batch_size_testing = self.args.batch_size_finetuning
-        self.batch_size_validation = self.args.batch_size_validation
+        self.batch_size_testing = self.args.batch_size_testing
 
         self.init_dataset(self.args, model_config)
 
@@ -90,7 +88,7 @@ class Finetuner(object):
                 transforms.Resize(28),
                 transforms.CenterCrop(28),
                 transforms.ToTensor(),
-                #normalize
+                normalize
             ])
         else:
             # for imagenet
@@ -112,33 +110,31 @@ class Finetuner(object):
                            transform=transformations)
 
         total_length = len(self.train_set)
-        val_length = int(args.validation_split * total_length)
         calib_length = int(args.calib_subset * total_length)
 
-        train_length = total_length - val_length - calib_length
+        train_length = total_length - calib_length
 
-        self.train_set, self.val_set, self.calib_set = random_split(
+        self.train_set, self.calib_set = random_split(
             self.train_set, 
-            [train_length, val_length, calib_length]
+            [train_length, calib_length]
         )
+
+        self.train_set, _ = random_split(self.train_set, 
+                                         [int(train_length * self.args.finetuning_subset), 
+                                          int(train_length - train_length * self.args.finetuning_subset)])
 
         self.train_loader = DataLoader(self.train_set,
                                        batch_size = self.batch_size_finetuning,
                                        num_workers = self.args.num_workers,
-                                       sampler = sampler.SubsetRandomSampler(range(int(self.args.finetuning_split * len(self.train_set)))))
+                                       shuffle = True)
         
         self.calib_loader = DataLoader(self.calib_set, 
                                        batch_size = self.batch_size_finetuning,
                                        num_workers = self.args.num_workers,
                                        shuffle = True)
-        
-        self.val_loader = DataLoader(self.val_set,
-                                     batch_size = self.batch_size_validation,
-                                     num_workers = self.args.num_workers,
-                                     shuffle = True)
-        
+             
         self.test_loader = DataLoader(self.test_set,
-                                      batch_size = self.batch_size_validation,
+                                      batch_size = self.batch_size_testing,
                                       num_workers = self.args.num_workers)
         
     def init_model(self):
@@ -163,11 +159,12 @@ class Finetuner(object):
     def init_finetuning_optim(self):
 
         self.finetuning_lr = self.args.finetuning_lr
-
+        
         if self.args.optimizer == 'Adam':
-            self.finetuning_optimizer = torch.optim.Adam(self.model.parameters(), lr = self.finetuning_lr)
+            self.finetuning_optimizer = torch.optim.Adam(self.model.parameters(), lr = self.finetuning_lr, weight_decay = self.args.weight_decay)
         elif self.args.optimizer == 'SGD':
-            self.finetuning_optimizer = torch.optim.SGD(self.model.parameters(), lr = self.finetuning_lr)
+            self.finetuning_optimizer = torch.optim.SGD(self.model.parameters(), lr = self.finetuning_lr, 
+                                                      weight_decay = self.args.weight_decay, momentum=self.args.momentum)
         
         self.starting_epoch = 0
         
@@ -177,10 +174,11 @@ class Finetuner(object):
         elif self.args.loss == 'SqrHinge':
             self.criterion = nn.SqrHingeLoss()
     
-    def check_accuracy(self, loader, model):
+    def check_accuracy(self, loader, model, eval = True):
         num_correct = 0
         num_samples = 0
-        model.eval() # set model to evaluation mode
+        if eval:
+            model.eval() # set model to evaluation mode
 
         with torch.no_grad():
             for x_val, y_val in loader:
@@ -219,11 +217,11 @@ class Finetuner(object):
             print("Training Complete")
             # Testing accuracy in the testing dataset
             print('-------- Testing Accuracy -------')
-            self.test_acc = self.check_accuracy(self.test_loader, self.model)
+            self.test_acc = self.check_accuracy(self.test_loader, self.model, eval = False)
             return self.test_acc, self.model
     
-    def validate(self):
-        return validate(self.model, val_loader=self.val_loader)
+    def validate(self, eval = True):
+        return validate(self.model, val_loader=self.test_loader, eval = eval)
 
     def calibrate(self):
         calibrate(self.args, self.model, calib_loader=self.calib_loader)

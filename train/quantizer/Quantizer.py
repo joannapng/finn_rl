@@ -474,7 +474,6 @@ class Quantizer(object):
     def quantize_layer(self,
                        model,
                        layer_idx,
-                       is_final_layer,
                        weight_bit_width):
         
         ignore_missing_keys_state = config.IGNORE_MISSING_KEYS

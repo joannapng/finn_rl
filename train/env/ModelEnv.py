@@ -8,7 +8,6 @@ from enum import IntEnum
 
 from brevitas.graph.utils import get_module
 from brevitas.graph.quantize import preprocess_for_quantize
-from brevitas_examples.imagenet_classification.ptq.ptq_common import apply_bias_correction
 import brevitas.nn as qnn
 
 from ..quantizer import Quantizer
@@ -106,10 +105,7 @@ class ModelEnv(gym.Env):
         # if model is not already preprocessed for quantization
         if not rebuild:
             # TODO check sizes
-            self.model = preprocess_for_quantize(self.model,
-                                                 equalize_merge_bias = self.args.graph_eq_merge_bias,
-                                                 equalize_iters = self.args.graph_eq_iterations, 
-                                                 merge_bn = self.args.merge_bn)
+            self.model = preprocess_for_quantize(self.model)
             _, params, size_params, size_activations = measure_model(self.model, 28, 28, self.finetuner.in_channels, quant_strategy = None, bias_quant = 32) # measure feature maps for each model
         
         self.quantizable_idx = []
@@ -196,11 +192,7 @@ class ModelEnv(gym.Env):
         super().reset(seed = seed)
 
         self.model = copy.deepcopy(self.orig_model).to(self.finetuner.device)
-        self.model = preprocess_for_quantize(self.model,
-                                            equalize_merge_bias = self.args.graph_eq_merge_bias,
-                                            equalize_iters = self.args.graph_eq_iterations, 
-                                            merge_bn = self.args.merge_bn)
-        
+        self.model = preprocess_for_quantize(self.model)
         self.model = self.quantizer.quantize_input(self.model)
         self.build_index(rebuild=True)
         self.model.to(self.finetuner.device)
@@ -214,6 +206,7 @@ class ModelEnv(gym.Env):
         self.index_to_quantize = self.quantizable_idx[self.cur_ind]
         self.action_running_mean = 0
         self.strategy = []
+        self.num_actions = 0
         obs = self.layer_embedding[0].copy()
         info = {"info": 0}
         return obs, info
@@ -222,6 +215,7 @@ class ModelEnv(gym.Env):
 
         action = self.get_action(action)
         self.strategy.append(action)
+        self.num_actions += 1
 
         print(self.strategy)
 
@@ -236,38 +230,35 @@ class ModelEnv(gym.Env):
         # if activations have been quantized, quantize outputs and handle residuals
         if self.cur_ind == self.num_quant_acts:
             self.model = self.quantizer.quantize_output(self.model)
-            self.model = self.quantizer.handle_residuals(self.model)
-
-            # build index again, because quantize output and handle residuals can insert quantizers
             self.build_index(rebuild = True)
-        
+            
+            self.model = self.quantizer.handle_residuals(self.model)
+            self.build_index(rebuild = True)        
+            
         if self.cur_ind >= self.num_quant_acts:
             self.model = self.quantizer.quantize_layer(self.model, 
                                                        self.index_to_quantize, 
-                                                       self.is_final_layer(),
                                                        int(action[0]))
             # build index again, because quanize layers can insert quantizers
             self.build_index(rebuild = True)
 
-        self.finetuner.model = self.model
-        self.finetuner.model.to(self.finetuner.device)
-
-        # finetune only after all layers have been quantized
         if self.is_final_layer():
             self.quantizer.finalize(self.model)
-            self.finetuner.model = self.model
-            self.finetuner.model.to(self.finetuner.device)
+
+        self.finetuner.model = self.model
+        self.finetuner.model.to(self.finetuner.device)
+        
+        # can only calibrate if residuals are handled
+        if self.cur_ind >= self.num_quant_acts:
             self.finetuner.calibrate()
 
-            if self.args.bias_corr:
-                apply_bias_correction(self.finetuner.calib_loader, self.model)
-
-            self.finetuner.validate()
+        if self.num_actions % self.args.finetune_every == 0 or self.is_final_layer():
             self.finetuner.init_finetuning_optim()
             self.finetuner.init_loss()
             self.finetuner.finetune()
-        
-        acc = self.finetuner.validate()
+            self.num_actions = 0
+
+        acc = self.finetuner.validate(eval = False)
 
         self.action_running_mean = ((action[0]) / (self.max_bit) + (self.cur_ind) * self.action_running_mean) / (self.cur_ind + 1)
         reward = self.reward(acc)

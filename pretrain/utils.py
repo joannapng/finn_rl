@@ -4,6 +4,10 @@ import torch.nn as nn
 import torch.nn.init as init
 from torchvision.models.resnet import BasicBlock, Bottleneck
 from torch import Tensor
+from torch import hub
+
+root_url = 'https://github.com/Xilinx/brevitas/releases/download/'
+resnet18_url =  f"{root_url}/a2q_cifar10_r1/float_resnet18-1d98d23a.pth"
 
 def get_model_config(model_name, custom_model_name, dataset):
     config = dict()
@@ -48,7 +52,7 @@ def get_model_config(model_name, custom_model_name, dataset):
     return config
     '''
 
-def get_torchvision_model(model_name, num_classes, device, pretrained=False):
+def get_torchvision_model(model_name, num_classes, device, pretrained=False, dataset = "CIFAR10"):
     model_fn = getattr(torchvision.models, model_name)
     if model_name == 'inception_v3' or model_name == 'googlenet':
         if pretrained == True:
@@ -57,6 +61,13 @@ def get_torchvision_model(model_name, num_classes, device, pretrained=False):
             model = model_fn(transform_input=False, num_classes = num_classes)
     else:
         if pretrained == True:
+            '''
+            if dataset == "CIFAR10" and "resnet18" in model_name:
+                model = model_fn(num_classes = num_classes)
+                state_dict = hub.load_state_dict_from_url(resnet18_url, progress = True)
+                model.load_state_dict(state_dict, strict=True)
+            '''
+            #else:
             model = model_fn(num_classes = num_classes, weights = "DEFAULT")
         else:
             model = model_fn(num_classes = num_classes)

@@ -17,12 +17,10 @@ build_dir = os.environ['FINN_BUILD_DIR']
 parser = argparse.ArgumentParser(description = 'Transform input onnx model to hw')
 parser.add_argument('--onnx-model', required = True, type = str, help = 'QONNX model to transform using FINN Compiler')
 parser.add_argument('--output-dir', required = False, default = '', type = None, help = 'Output directory')
-parser.add_argument('--synth-clk-period-ns', type = float, default = 10.0, help = 'Target clock period in ns')
+parser.add_argument('--synth-clk-period-ns', type = float, default = 5.0, help = 'Target clock period in ns')
 parser.add_argument('--board', default = "U250", help = "Name of target board")
 parser.add_argument('--shell-flow-type', default = "vitis_alveo", choices = ["vivado_zynq", "vitis_alveo"], help = "Target shell type")
 parser.add_argument('--target-fps', type = int, default = 100000, help = 'Target fps')
-parser.add_argument('--dataset', default = "MNIST", choices = ["MNIST", "CIFAR10"], help = 'Dataset')
-
 
 def main():
 	args = parser.parse_args()
@@ -38,6 +36,7 @@ def main():
 		vitis_platform = alveo_default_platform[args.board],
 		split_large_fifos = True,
 		large_fifo_mem_style = LargeFIFOMemStyle.URAM,
+		auto_fifo_strategy = AutoFIFOSizingMethod.CHARACTERIZE,
 		steps = [
 			preprocessing,
 			postprocessing,
