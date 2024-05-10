@@ -70,10 +70,9 @@ class ModelEnv(gym.Env):
         self.strategy = [] # quantization strategy
         
         self.min_bit = args.min_bit
-        self.max_bit = args.max_bit
-        self.last_action = [args.max_bit, args.max_bit] # set the action for the previous layer to max_bit
-        
+        self.max_bit = args.max_bit   
         self.best_reward = -math.inf
+        self.model_config = model_config
         
         self.build_index() # build the states for each layer
         self.index_to_quantize = self.quantizable_idx[self.cur_ind]
@@ -94,6 +93,7 @@ class ModelEnv(gym.Env):
         )
     
         self.orig_acc = self.finetuner.orig_acc
+        self.prev_acc = self.orig_acc
         self.action_running_mean = 0
 
     def build_index(self, rebuild = False):
@@ -104,9 +104,9 @@ class ModelEnv(gym.Env):
 
         # if model is not already preprocessed for quantization
         if not rebuild:
-            # TODO check sizes
             self.model = preprocess_for_quantize(self.model)
-            _, params, size_params, size_activations = measure_model(self.model, 28, 28, self.finetuner.in_channels, quant_strategy = None, bias_quant = 32) # measure feature maps for each model
+            measure_model(self.model, self.model_config['center_crop_shape'], 
+                      self.model_config['center_crop_shape'], self.finetuner.in_channels) # measure feature maps for each model
         
         self.quantizable_idx = []
         self.layer_types = []
@@ -131,16 +131,9 @@ class ModelEnv(gym.Env):
                     elif type(module) == nn.Sigmoid or type(module) == qnn.QuantSigmoid:
                         this_state.append([ActTypes.SIGMOID])
 
-                    weights = prev_module.weight
-                    _, fan_out = nn.init._calculate_fan_in_and_fan_out(weights)
-                    this_state.append([fan_out])
-                    this_state.append([fan_out])
+                    this_state.append([module.flops])
+                    this_state.append([module.params])
                     layer_embedding.append(np.hstack(this_state))
-
-                # get fan in and fan out of previous layer with learnable parameters
-                if type(module) in self.quantizable_layers:
-                    prev_module = module
-        
         # number of activation layers
         self.num_quant_acts = len(self.quantizable_idx)
 
@@ -170,8 +163,8 @@ class ModelEnv(gym.Env):
 
                     weights = module.weight
                     fan_in, fan_out = nn.init._calculate_fan_in_and_fan_out(weights)
-                    this_state.append([fan_in])
-                    this_state.append([fan_out])
+                    this_state.append([module.flops])
+                    this_state.append([module.params])
                     layer_embedding.append(np.hstack(this_state))
 
         layer_embedding = np.array(layer_embedding, dtype=np.float32)
@@ -185,16 +178,13 @@ class ModelEnv(gym.Env):
         
         self.layer_embedding = layer_embedding
 
-        if not rebuild:
-            self.orig_size = size_params + size_activations
-
     def reset(self, seed = None, option = None):
         super().reset(seed = seed)
 
         self.model = copy.deepcopy(self.orig_model).to(self.finetuner.device)
         self.model = preprocess_for_quantize(self.model)
         self.model = self.quantizer.quantize_input(self.model)
-        self.build_index(rebuild=True)
+        self.build_index(rebuild=False)
         self.model.to(self.finetuner.device)
 
         self.finetuner.model = self.model
@@ -207,17 +197,15 @@ class ModelEnv(gym.Env):
         self.action_running_mean = 0
         self.strategy = []
         self.num_actions = 0
+        self.prev_acc = self.max_bit # initialize prev action to maximum allowed bit
         obs = self.layer_embedding[0].copy()
         info = {"info": 0}
         return obs, info
     
     def step(self, action):
-
         action = self.get_action(action)
         self.strategy.append(action)
         self.num_actions += 1
-
-        print(self.strategy)
 
         # if not all activations have been quantized
         if self.cur_ind < self.num_quant_acts:
@@ -243,10 +231,14 @@ class ModelEnv(gym.Env):
             self.build_index(rebuild = True)
 
         if self.is_final_layer():
+            print(self.strategy)
             self.quantizer.finalize(self.model)
 
         self.finetuner.model = self.model
         self.finetuner.model.to(self.finetuner.device)
+
+        # accuracy before finetuning
+        acc = self.finetuner.validate(eval = False)
         
         # can only calibrate if residuals are handled
         if self.cur_ind >= self.num_quant_acts:
@@ -255,17 +247,21 @@ class ModelEnv(gym.Env):
         if self.num_actions % self.args.finetune_every == 0 or self.is_final_layer():
             self.finetuner.init_finetuning_optim()
             self.finetuner.init_loss()
+
+            # if it is final layer train for 10 epochs
+            if self.is_final_layer():
+                self.finetuner.finetuning_epochs = 10
+            
             self.finetuner.finetune()
             self.num_actions = 0
 
-        acc = self.finetuner.validate(eval = False)
-
         self.action_running_mean = ((action[0]) / (self.max_bit) + (self.cur_ind) * self.action_running_mean) / (self.cur_ind + 1)
-        reward = self.reward(acc)
+        reward = self.reward(acc, action[0])
 
         if self.is_final_layer():
             obs = self.layer_embedding[self.cur_ind, :].copy()
             terminated = True
+            acc = self.finetuner.validate(eval = False)
             info = {"accuracy": acc}
             print(f'Accuracy: {acc}, Size: {self.action_running_mean}')
             return obs, reward, terminated, False, info
@@ -274,12 +270,16 @@ class ModelEnv(gym.Env):
         self.cur_ind += 1 
         self.index_to_quantize = self.quantizable_idx[self.cur_ind]
         obs = self.layer_embedding[self.cur_ind, :].copy()
+        self.prev_acc = acc
+        acc = self.finetuner.validate(eval = False)
         info = {"accuracy": acc}
         return obs, reward, terminated, False, info
         
-    def reward(self, acc):
-        r1 = acc
-        r2 = -(self.action_running_mean) * 100
+    def reward(self, acc, action):
+        # in the case we have an increase in performance prev_acc - acc < 0 so r1 > 1
+        r1 = (1 - (self.prev_acc - acc) / self.prev_acc) * 100
+        r2 = - action / self.max_bit * 100
+
         return (np.array([r1, r2]) * self.utility_weights).sum()
 
     def get_action(self, action):

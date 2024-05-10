@@ -16,14 +16,12 @@ def get_num_gen(gen):
 def is_leaf(model):
     return get_num_gen(model.children()) == 0
 
-def measure_layer(layer, x, quant_strategy = None, bias_quant = None):
-    global count_ops, count_params, count_params_size, count_activations_size, index
+def measure_layer(layer, x):
     delta_ops = 0
     delta_params = 0
     multi_add = 1
     type_name = get_layer_info(layer)
 
-    # ops_conv
     if type_name in ['Conv2d']:
         out_h = int((x.size()[2] + 2 * layer.padding[0] - layer.kernel_size[0]) /
                     layer.stride[0] + 1)
@@ -38,29 +36,14 @@ def measure_layer(layer, x, quant_strategy = None, bias_quant = None):
         delta_params = get_layer_param(layer)
         layer.flops = delta_ops
         layer.params = delta_params
-        
-        if quant_strategy is None:
-            weight_size = 32
-            bias_size = 32
-            activation_size = 8
-        else:
-            activation_size = quant_strategy[index][0]
-            weight_size = quant_strategy[index][1]
-            bias_size = bias_quant
-            index += 1
-
-        count_params_size += layer.weight.numel() * weight_size
-
-        if layer.bias is not None:
-            count_params_size += layer.out_channels * bias_size
-
-        count_activations_size += (layer.in_h * layer.in_w * layer.in_channels) * activation_size
-
 
     # ops_nonlinearity
-    elif type_name in ['ReLU']:
+    elif type_name in ['ReLU', 'ReLU6', 'Sigmoid']:
         delta_ops = x.numel() / x.size(0)
         delta_params = get_layer_param(layer)
+
+        layer.flops = delta_ops
+        layer.params = delta_params
 
     # ops_pooling
     elif type_name in ['AvgPool2d']:
@@ -71,9 +54,15 @@ def measure_layer(layer, x, quant_strategy = None, bias_quant = None):
         delta_ops = x.size()[1] * out_w * out_h * kernel_ops
         delta_params = get_layer_param(layer)
 
+        layer.flops = delta_ops
+        layer.params = delta_params
+
     elif type_name in ['AdaptiveAvgPool2d']:
         delta_ops = x.size()[1] * x.size()[2] * x.size()[3]
         delta_params = get_layer_param(layer)
+
+        layer.flops = delta_ops
+        layer.params = delta_params
 
     # ops_linear
     elif type_name in ['Linear']:
@@ -86,36 +75,19 @@ def measure_layer(layer, x, quant_strategy = None, bias_quant = None):
         layer.in_w = 1
         delta_ops = weight_ops + bias_ops
         delta_params = get_layer_param(layer)
+        
         layer.flops = delta_ops
         layer.params = delta_params
-
-        if quant_strategy is None:
-            weight_size = 32
-            bias_size = 32
-            activation_size = 8
-        else:
-            activation_size = quant_strategy[index][0]
-            weight_size = quant_strategy[index][1]
-            bias_size = bias_quant
-            index += 1
-
-        count_params_size += layer.weight.numel() * weight_size + bias_ops * bias_size
-        count_activations_size += layer.in_features * activation_size
-
     # ops_nothing
     elif type_name in ['BatchNorm2d', 'Dropout2d', 'DropChannel', 'Dropout']:
         delta_params = get_layer_param(layer)
+        layer.params = delta_params
 
     # unknown layer type
     else:
         delta_params = get_layer_param(layer)
 
-    count_ops += delta_ops
-    count_params += delta_params
-
-    return delta_ops, delta_params
-
-def measure_model(model, H, W, num_channels, quant_strategy = None, bias_quant = None):
+def measure_model(model, H, W, num_channels):
     global count_ops, count_params, count_params_size, count_activations_size, index
     count_ops = 0
     count_params = 0
@@ -133,7 +105,7 @@ def measure_model(model, H, W, num_channels, quant_strategy = None, bias_quant =
             if should_measure(child):
                 def new_forward(m):
                     def lambda_forward(x):
-                        measure_layer(m, x, quant_strategy, bias_quant)
+                        measure_layer(m, x)
                         return m.old_forward(x)
                     return lambda_forward
                 child.old_forward = child.forward
@@ -153,4 +125,3 @@ def measure_model(model, H, W, num_channels, quant_strategy = None, bias_quant =
     modify_forward(model)
     model.forward(data)
     restore_forward(model)
-    return count_ops, count_params, count_params_size, count_activations_size

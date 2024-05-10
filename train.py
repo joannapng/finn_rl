@@ -10,6 +10,7 @@ from stable_baselines3.common.noise import NormalActionNoise
 from stable_baselines3.common.callbacks import StopTrainingOnNoModelImprovement, EvalCallback
 from stable_baselines3 import A2C, DDPG, PPO, SAC, TD3
 from copy import deepcopy
+import multiprocessing as mp
 
 rl_algorithms = {
     'A2C': A2C,
@@ -89,6 +90,23 @@ parser.add_argument('--noise', default = 0.1, type = float, help = 'Std for adde
 parser.add_argument('--num-episodes', default = 100, type = int, help = 'Number of episodes (passes over the entire network) to train the agent for')
 parser.add_argument('--log-every', default = 10, type = int, help = 'How many episodes to wait to log agent')
 
+def train_agent(agent_index, env, eval_env, weights, args):
+    n_actions = env.action_space.shape[-1]
+    action_noise = NormalActionNoise(mean=np.zeros(n_actions), sigma=args.noise * np.ones(n_actions))
+
+    agent = rl_algorithms[args.agent]("MlpPolicy", env, action_noise=action_noise, verbose=1)
+
+    stop_train_callback = StopTrainingOnNoModelImprovement(max_no_improvement_evals=3)
+    eval_callback = EvalCallback(eval_env, eval_freq=len(env.quantizable_idx) * 10,
+                                 callback_after_eval=stop_train_callback, 
+                                 n_eval_episodes=1,
+                                 verbose=1)
+
+    agent.learn(total_timesteps=len(env.quantizable_idx) * args.num_episodes, 
+                log_interval=args.log_every,
+                callback=eval_callback)
+    agent.save(f"agents/agent_{weights[0]}_{weights[1]}_{agent_index}")
+    
 def get_weights(num_agents):
     weights = []
 
@@ -120,8 +138,8 @@ def main():
         agents.append(agent("MlpPolicy", envs[-1], action_noise = action_noise, verbose = 1))
     
     for i, agent in enumerate(agents):
-        stop_train_callback = StopTrainingOnNoModelImprovement(max_no_improvement_evals=2)
-        eval_callback = EvalCallback(eval_envs[i], eval_freq = len(envs[i].quantizable_idx * (int(args.num_episodes / 10) + 1)),
+        stop_train_callback = StopTrainingOnNoModelImprovement(max_no_improvement_evals=3)
+        eval_callback = EvalCallback(eval_envs[i], eval_freq = len(envs[i].quantizable_idx * 10),
                                      callback_after_eval=stop_train_callback, 
                                      n_eval_episodes=1,
                                      verbose = 1)

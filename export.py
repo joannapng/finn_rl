@@ -34,9 +34,9 @@ def main():
 		shell_flow_type = args.shell_flow_type,
 		fpga_part = part_map[args.board],
 		vitis_platform = alveo_default_platform[args.board],
-		split_large_fifos = True,
-		large_fifo_mem_style = LargeFIFOMemStyle.URAM,
-		auto_fifo_strategy = AutoFIFOSizingMethod.CHARACTERIZE,
+		#split_large_fifos = True,
+		large_fifo_mem_style = LargeFIFOMemStyle.LUTRAM,
+		#auto_fifo_strategy = AutoFIFOSizingMethod.CHARACTERIZE, rtlsimulation, too much time
 		steps = [
 			preprocessing,
 			postprocessing,

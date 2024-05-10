@@ -210,15 +210,15 @@ class Finetuner(object):
                     loss.backward()
                     self.finetuning_optimizer.step()
 
-                    if i % self.args.print_every == 0:
-                        print("Epoch: [{}/{}], Step: [{}/{}], Loss: {:.4f}"
-                            .format(epoch, self.finetuning_epochs, i, num_steps, loss))
+                    #if i % self.args.print_every == 0:
+                        #print("Epoch: [{}/{}], Step: [{}/{}], Loss: {:.4f}"
+                            #.format(epoch, self.finetuning_epochs, i, num_steps, loss))
 
-            print("Training Complete")
+            #print("Training Complete")
             # Testing accuracy in the testing dataset
             print('-------- Testing Accuracy -------')
             self.test_acc = self.check_accuracy(self.test_loader, self.model, eval = False)
-            return self.test_acc, self.model
+            return 0.0, self.model
     
     def validate(self, eval = True):
         return validate(self.model, val_loader=self.test_loader, eval = eval)
