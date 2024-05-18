@@ -8,7 +8,7 @@ class Logger(object):
 
         # create custom logger
         self.log = logging.getLogger('log')
-        self.log.setLevel(logging.INFO)
+        self.log.setLevel(logging.CRITICAL)
 
         # create handlers
         stdout_handler = logging.StreamHandler(sys.stdout)

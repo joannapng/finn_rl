@@ -1,3 +1,4 @@
+from copy import deepcopy
 from pickle import TRUE
 import torch.nn as nn
 import brevitas
@@ -7,8 +8,6 @@ import operator
 from brevitas.core.scaling.standalone import ParameterFromStatsFromParameterScaling
 from brevitas.quant.shifted_scaled_int import ShiftedUint8ActPerTensorFloat
 from brevitas.quant.scaled_int import Int16Bias, Int32Bias, Int8ActPerTensorFloat, Uint8ActPerTensorFloat, Int8WeightPerTensorFloat
-from brevitas.inject.enum import RestrictValueType
-from brevitas.core.function_wrapper.ops_ste import CeilSte
 from brevitas.nn.quant_layer import QuantWeightBiasInputOutputLayer as QuantWBIOL
 from brevitas.nn.quant_mha import QuantMultiheadAttention
 from brevitas import config
@@ -20,9 +19,7 @@ from brevitas.graph.base import InsertModuleCallAfter
 import torch
 from brevitas.graph.base import ModuleToModuleByInstance
 from brevitas.graph.base import ModuleInstanceToModuleInstance
-from brevitas.quant.experimental.float import Fp8e4m3Act
 from brevitas.quant.experimental.float import Fp8e4m3ActPerTensorFloat
-from brevitas.quant.experimental.float import Fp8e4m3ActPerTensorFloatMSE
 from brevitas.quant.experimental.float import Fp8e4m3WeightPerChannelFloat
 from brevitas.quant.experimental.float import Fp8e4m3WeightPerChannelFloatMSE
 from brevitas.quant.experimental.float import Fp8e4m3WeightPerTensorFloat
@@ -52,12 +49,12 @@ from brevitas.quant.shifted_scaled_int import ShiftedUint8WeightPerTensorFloatMS
 
 from brevitas.graph.standardize import DisableLastReturnQuantTensor
 from brevitas.graph.quantize_impl import SIGN_PRESERVING_MODULES
-from brevitas.core.restrict_val import RestrictValueType
 from brevitas.core.scaling import ScalingImplType
 from brevitas.core.scaling.standalone import ConstScaling
 from brevitas.core.scaling.standalone import ParameterScaling
 
 from brevitas_examples.bnn_pynq.models.common import CommonActQuant
+
 def align_input_quant(
         module, shared_quant_identity, shared_quant_identity_name, quant_identity_map, align_sign):
     """
@@ -116,7 +113,7 @@ def align_input_quant(
     else:
         return shared_quant_identity_name
     
-BIAS_BIT_WIDTH_MAP = {32: Int32Bias, 16: Int16Bias, None: None}
+BIAS_BIT_WIDTH_MAP = {32: Int32Bias, 16: Int16Bias, 8: Int8Bias, None: None}
 UNSIGNED_ACT_TUPLE = (nn.ReLU, nn.ReLU6, nn.Sigmoid, nn.Hardsigmoid)
 WEIGHT_QUANT_MAP = {
     'int': {
@@ -268,8 +265,7 @@ class Quantizer(object):
         weight_bit_width_dict = {'bit_width' : weight_bit_width}
         act_bit_width_dict = {'bit_width': act_bit_width}
 
-        #bias_quant = BIAS_BIT_WIDTH_MAP[bias_bit_width] if act_bit_width is not None else None
-        bias_quant = None
+        bias_quant = BIAS_BIT_WIDTH_MAP[bias_bit_width] if act_bit_width is not None else None
         weight_quant = WEIGHT_QUANT_MAP[weight_quant_format][weight_scale_type][weight_param_method][weight_quant_granularity][weight_quant_type]
         weight_quant = weight_quant.let(**weight_bit_width_dict)
 
@@ -287,7 +283,6 @@ class Quantizer(object):
             }
         )
 
-        # TODO: if weight quantization is symmetric
         act_quant = act_quant.let(
             **{
                 'high_percentile_q': act_quant_percentile, 'dtype' : torch.float32,
@@ -334,8 +329,10 @@ class Quantizer(object):
             'packed_in_proj': True,
             'dtype': torch.float32,
             'return_quant_tensor': False}
+        
         quant_act_kwargs = {'act_quant': act_quant, 'return_quant_tensor' : True}
         unsigned_quant_act_kwargs = quant_act_kwargs.copy()
+
         if uint_sym_act_for_unsigned_values:
             quant_mha_kwargs['attn_output_weights_signed'] = False
             unsigned_quant_act_kwargs['signed'] = False
@@ -371,16 +368,14 @@ class Quantizer(object):
         training_state = model.training
         model.eval()
 
+        # Input quantizer fixed at 8 bits
         input_quantizer = (qnn.QuantIdentity, {'act_quant' : CommonActQuant,
                                                'bit_width' : 8,
-                                               'min_val' : -1.0,
-                                               'max_val' : 1.0 - 2.0 ** (-7),
                                                'narrow_range' : False,
                                                'scaling_impl_type' : ScalingImplType.CONST})
         
         model = inp_placeholder_handler(model, input_quantizer)
 
-        #model = DisableLastReturnQuantTensor().apply(model)
         model.train(training_state)
         config.IGNORE_MISSING_KEYS = ignore_missing_keys_state
         return model
@@ -389,6 +384,7 @@ class Quantizer(object):
                      model,
                      act_idx, 
                      act_bit_width):
+        
         ignore_missing_keys_state = config.IGNORE_MISSING_KEYS
         config.IGNORE_MISSING_KEYS = True
         training_state = model.training
@@ -423,7 +419,6 @@ class Quantizer(object):
             
         model = rewriter.apply(model)
 
-        #model = DisableLastReturnQuantTensor().apply(model)
         model.train(training_state)
         config.IGNORE_MISSING_KEYS = ignore_missing_keys_state
 
@@ -439,12 +434,11 @@ class Quantizer(object):
         quant_identity_map = self.quantize_kwargs['quant_identity_map']
         quant_act_map = self.quantize_kwargs['quant_act_map']
         unsigned_act_tuple = UNSIGNED_ACT_TUPLE
-
+        
         model = add_output_quant_handler(
             model, quant_identity_map, quant_act_map, unsigned_act_tuple
         )
         
-        #model = DisableLastReturnQuantTensor().apply(model)
         model.train(training_state)
         config.IGNORE_MISSING_KEYS = ignore_missing_keys_state
         
@@ -464,8 +458,7 @@ class Quantizer(object):
         model = residual_handler(
             model, quant_identity_map, quant_act_map, unsigned_act_tuple, align_input_quant
         )
-        
-        #model = DisableLastReturnQuantTensor().apply(model)
+
         model.train(training_state)
         config.IGNORE_MISSING_KEYS = ignore_missing_keys_state
 
@@ -486,7 +479,6 @@ class Quantizer(object):
         quant_act_map = self.quantize_kwargs['quant_act_map']
         unsigned_act_tuple = UNSIGNED_ACT_TUPLE
         
-        # TODO: check the requantize output
         for i, node in enumerate(model.graph.nodes):
             rewriters = []
             if node.op == 'call_module' and i == layer_idx:
@@ -504,6 +496,9 @@ class Quantizer(object):
                                     quant_act_map=quant_act_map,
                                     unsigned_act_tuple=unsigned_act_tuple)
                     else:
+                        # for output quant
+                        output_quant_identity_map = deepcopy(quant_identity_map)
+                        output_quant_identity_map['bit_width'] = 8
                         output_quant_handler(
                         model,
                         node,
@@ -512,6 +507,7 @@ class Quantizer(object):
                         quant_identity_map=quant_identity_map,
                         quant_act_map=quant_act_map,
                         unsigned_act_tuple=unsigned_act_tuple)
+
                     if layer_map[type(module)] is not None:
                         quant_module_class, quant_module_kwargs = layer_map[type(module)]
                         quant_module_kwargs['weight_bit_width'] = weight_bit_width
@@ -531,16 +527,15 @@ class Quantizer(object):
                                 name, previous_node, tuple(previous_node_users)
                             )
                             rewriters.append(rewriter)
+                        rewriter = ModuleToModuleByInstance(
+                            module, quant_module_class, **quant_module_kwargs
+                        )
+                        rewriters.append(rewriter)
                         break
-        rewriter = ModuleToModuleByInstance(
-            module, quant_module_class, **quant_module_kwargs
-        )
-        rewriters.append(rewriter)
 
         for rewriter in rewriters:
             model = rewriter.apply(model)
 
-        #model = DisableLastReturnQuantTensor().apply(model)
         model.train(training_state)
         config.IGNORE_MISSING_KEYS = ignore_missing_keys_state
 

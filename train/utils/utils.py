@@ -22,7 +22,7 @@ def measure_layer(layer, x):
     multi_add = 1
     type_name = get_layer_info(layer)
 
-    if type_name in ['Conv2d']:
+    if type_name in ['Conv2d', 'QuantConv2d']:
         out_h = int((x.size()[2] + 2 * layer.padding[0] - layer.kernel_size[0]) /
                     layer.stride[0] + 1)
         out_w = int((x.size()[3] + 2 * layer.padding[1] - layer.kernel_size[1]) /
@@ -38,7 +38,7 @@ def measure_layer(layer, x):
         layer.params = delta_params
 
     # ops_nonlinearity
-    elif type_name in ['ReLU', 'ReLU6', 'Sigmoid']:
+    elif type_name in ['ReLU', 'ReLU6', 'Sigmoid', 'QuantReLU', 'QuantSigmoid']:
         delta_ops = x.numel() / x.size(0)
         delta_params = get_layer_param(layer)
 
@@ -65,7 +65,7 @@ def measure_layer(layer, x):
         layer.params = delta_params
 
     # ops_linear
-    elif type_name in ['Linear']:
+    elif type_name in ['Linear', 'QuantLinear']:
         weight_ops = layer.weight.numel() * multi_add
         if layer.bias is not None:
             bias_ops = layer.bias.numel()

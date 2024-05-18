@@ -7,7 +7,7 @@ from train.env import ModelEnv
 from pretrain.utils import get_model_config
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.noise import NormalActionNoise
-from stable_baselines3.common.callbacks import StopTrainingOnNoModelImprovement, EvalCallback
+from train.callbacks.StopTrainingOnNoImprovementCallback import StopTrainingOnNoImprovementCallback
 from stable_baselines3 import A2C, DDPG, PPO, SAC, TD3
 from copy import deepcopy
 import multiprocessing as mp
@@ -59,9 +59,9 @@ parser.add_argument('--device', default = 'GPU', help = 'Device for training')
 
 ### ----- QUANTIZATION PARAMETERS ----- ###
 parser.add_argument('--scale-factor-type', default='float_scale', choices=['float_scale', 'po2_scale'], help = 'Type for scale factors (default: float)')
-parser.add_argument('--act-bit-width', default=8, type=int, help = 'Activations bit width (default: 8)')
-parser.add_argument('--weight-bit-width', default=8, type=int, help = 'Weight bit width (default: 8)')
-parser.add_argument('--bias-bit-width', default=32, choices=[32, 16], help = 'Bias bit width (default: 32)')
+parser.add_argument('--act-bit-width', default=4, type=int, help = 'Activations bit width (default: 4)')
+parser.add_argument('--weight-bit-width', default=4, type=int, help = 'Weight bit width (default: 4)')
+parser.add_argument('--bias-bit-width', default=8, choices=[32, 16, 8], help = 'Bias bit width (default: 8)')
 parser.add_argument('--act-quant-type', default='sym', choices=['sym', 'asym'], help = 'Activation quantization type (default: sym)')
 parser.add_argument('--weight-quant-type', default = 'sym', choices = ['sym', 'asym'], help = 'Weight quantization type (default: sym)')
 parser.add_argument('--weight-quant-granularity', default = 'per_tensor', choices = ['per_tensor', 'per_channel'], help = 'Activation Quantization type (default: per_tensor)')
@@ -89,23 +89,6 @@ parser.add_argument('--agent', default = 'TD3', choices = ['A2C', 'DDPG', 'PPO',
 parser.add_argument('--noise', default = 0.1, type = float, help = 'Std for added noise in agent')
 parser.add_argument('--num-episodes', default = 100, type = int, help = 'Number of episodes (passes over the entire network) to train the agent for')
 parser.add_argument('--log-every', default = 10, type = int, help = 'How many episodes to wait to log agent')
-
-def train_agent(agent_index, env, eval_env, weights, args):
-    n_actions = env.action_space.shape[-1]
-    action_noise = NormalActionNoise(mean=np.zeros(n_actions), sigma=args.noise * np.ones(n_actions))
-
-    agent = rl_algorithms[args.agent]("MlpPolicy", env, action_noise=action_noise, verbose=1)
-
-    stop_train_callback = StopTrainingOnNoModelImprovement(max_no_improvement_evals=3)
-    eval_callback = EvalCallback(eval_env, eval_freq=len(env.quantizable_idx) * 10,
-                                 callback_after_eval=stop_train_callback, 
-                                 n_eval_episodes=1,
-                                 verbose=1)
-
-    agent.learn(total_timesteps=len(env.quantizable_idx) * args.num_episodes, 
-                log_interval=args.log_every,
-                callback=eval_callback)
-    agent.save(f"agents/agent_{weights[0]}_{weights[1]}_{agent_index}")
     
 def get_weights(num_agents):
     weights = []
@@ -138,15 +121,11 @@ def main():
         agents.append(agent("MlpPolicy", envs[-1], action_noise = action_noise, verbose = 1))
     
     for i, agent in enumerate(agents):
-        stop_train_callback = StopTrainingOnNoModelImprovement(max_no_improvement_evals=3)
-        eval_callback = EvalCallback(eval_envs[i], eval_freq = len(envs[i].quantizable_idx * 10),
-                                     callback_after_eval=stop_train_callback, 
-                                     n_eval_episodes=1,
-                                     verbose = 1)
+        stop_train_callback = StopTrainingOnNoImprovementCallback(check_freq=500, patience = 3)
 
-        agent.learn(total_timesteps = len(envs[i].quantizable_idx) * args.num_episodes, 
-                    log_interval = args.log_every,
-                    callback = eval_callback)
+        agent.learn(total_timesteps=len(env.quantizable_idx) * args.num_episodes, 
+                    log_interval=args.log_every,
+                    callback=stop_train_callback)
         agent.save("agents/agent_{}_{}".format(weights[i][0], weights[i][1]))
     
 if __name__ == "__main__":

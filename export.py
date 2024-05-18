@@ -4,7 +4,7 @@ import onnx
 import onnx.numpy_helper as nph
 import torch
 import numpy as np
-from exporter.Exporter import preprocessing, postprocessing, make_input_channels_last, streamline_resnet, convert_to_hw_resnet, name_nodes
+from exporter.Exporter import preprocessing, postprocessing, make_input_channels_last, streamline_resnet, convert_to_hw_resnet, name_nodes, set_folding
 import finn.builder.build_dataflow as build
 import finn.builder.build_dataflow_config as build_cfg
 from finn.builder.build_dataflow_config import LargeFIFOMemStyle, AutoFIFOSizingMethod
@@ -17,7 +17,7 @@ build_dir = os.environ['FINN_BUILD_DIR']
 parser = argparse.ArgumentParser(description = 'Transform input onnx model to hw')
 parser.add_argument('--onnx-model', required = True, type = str, help = 'QONNX model to transform using FINN Compiler')
 parser.add_argument('--output-dir', required = False, default = '', type = None, help = 'Output directory')
-parser.add_argument('--synth-clk-period-ns', type = float, default = 5.0, help = 'Target clock period in ns')
+parser.add_argument('--synth-clk-period-ns', type = float, default = 10.0, help = 'Target clock period in ns')
 parser.add_argument('--board', default = "U250", help = "Name of target board")
 parser.add_argument('--shell-flow-type', default = "vitis_alveo", choices = ["vivado_zynq", "vitis_alveo"], help = "Target shell type")
 parser.add_argument('--target-fps', type = int, default = 100000, help = 'Target fps')
@@ -29,14 +29,14 @@ def main():
 	cfg_build = build.DataflowBuildConfig(
 		output_dir = output_dir,
 		synth_clk_period_ns = args.synth_clk_period_ns,
-		mvau_wwidth_max = 100000,
+		mvau_wwidth_max = 1000000,
 		board = args.board,
 		shell_flow_type = args.shell_flow_type,
 		fpga_part = part_map[args.board],
 		vitis_platform = alveo_default_platform[args.board],
-		#split_large_fifos = True,
-		large_fifo_mem_style = LargeFIFOMemStyle.LUTRAM,
-		#auto_fifo_strategy = AutoFIFOSizingMethod.CHARACTERIZE, rtlsimulation, too much time
+		split_large_fifos = True,
+		large_fifo_mem_style = LargeFIFOMemStyle.URAM,
+		target_fps = 100000,
 		steps = [
 			preprocessing,
 			postprocessing,
@@ -48,7 +48,8 @@ def main():
 			convert_to_hw_resnet,
 			"step_create_dataflow_partition",
 			"step_specialize_layers",
-			"step_target_fps_parallelization",
+			name_nodes,
+			set_folding,
 			name_nodes,
 			"step_apply_folding_config",
 			"step_minimize_bit_width",
@@ -67,7 +68,7 @@ def main():
 		generate_outputs = [
 			build_cfg.DataflowOutputType.ESTIMATE_REPORTS,
 			build_cfg.DataflowOutputType.STITCHED_IP,
-			build_cfg.DataflowOutputType.RTLSIM_PERFORMANCE,
+			#build_cfg.DataflowOutputType.RTLSIM_PERFORMANCE,
 			build_cfg.DataflowOutputType.OOC_SYNTH,
 			build_cfg.DataflowOutputType.BITFILE,
 			build_cfg.DataflowOutputType.PYNQ_DRIVER,

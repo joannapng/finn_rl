@@ -96,17 +96,15 @@ class ModelEnv(gym.Env):
         self.prev_acc = self.orig_acc
         self.action_running_mean = 0
 
-    def build_index(self, rebuild = False):
+    def build_index(self):
         '''
         Store the indices and the types of the layers that are quantizable
         Construct the static part of the state
         '''
 
-        # if model is not already preprocessed for quantization
-        if not rebuild:
-            self.model = preprocess_for_quantize(self.model)
-            measure_model(self.model, self.model_config['center_crop_shape'], 
-                      self.model_config['center_crop_shape'], self.finetuner.in_channels) # measure feature maps for each model
+        self.model = preprocess_for_quantize(self.model)
+        measure_model(self.model, self.model_config['center_crop_shape'], 
+                    self.model_config['center_crop_shape'], self.finetuner.in_channels)
         
         self.quantizable_idx = []
         self.layer_types = []
@@ -161,8 +159,6 @@ class ModelEnv(gym.Env):
                     elif type(module) == nn.ConvTranspose2d or type(module) == qnn.QuantConvTranspose2d:
                         this_state.append([LayerTypes.CONVTRANSPOSE2D])
 
-                    weights = module.weight
-                    fan_in, fan_out = nn.init._calculate_fan_in_and_fan_out(weights)
                     this_state.append([module.flops])
                     this_state.append([module.params])
                     layer_embedding.append(np.hstack(this_state))
@@ -178,13 +174,32 @@ class ModelEnv(gym.Env):
         
         self.layer_embedding = layer_embedding
 
+    def update_index(self):
+        idx = 0
+
+        # update activation indices
+        for i, node in enumerate(self.model.graph.nodes):
+            if node.op == 'call_module':
+                module = get_module(self.model, node.target)
+                if type(module) in self.quantizable_acts:
+                    self.layer_embedding[idx][0] = i
+                    idx += 1
+
+        # update compute indices
+        for i, node in enumerate(self.model.graph.nodes):
+            if node.op == 'call_module':
+                module = get_module(self.model, node.target)
+                if type(module) in self.quantizable_layers:
+                    self.layer_embedding[idx][0] = i
+                    idx += 1
+
     def reset(self, seed = None, option = None):
         super().reset(seed = seed)
 
         self.model = copy.deepcopy(self.orig_model).to(self.finetuner.device)
         self.model = preprocess_for_quantize(self.model)
         self.model = self.quantizer.quantize_input(self.model)
-        self.build_index(rebuild=False)
+        self.build_index()
         self.model.to(self.finetuner.device)
 
         self.finetuner.model = self.model
@@ -218,17 +233,17 @@ class ModelEnv(gym.Env):
         # if activations have been quantized, quantize outputs and handle residuals
         if self.cur_ind == self.num_quant_acts:
             self.model = self.quantizer.quantize_output(self.model)
-            self.build_index(rebuild = True)
+            self.update_index()
             
             self.model = self.quantizer.handle_residuals(self.model)
-            self.build_index(rebuild = True)        
+            self.update_index()        
             
         if self.cur_ind >= self.num_quant_acts:
             self.model = self.quantizer.quantize_layer(self.model, 
                                                        self.index_to_quantize, 
                                                        int(action[0]))
             # build index again, because quanize layers can insert quantizers
-            self.build_index(rebuild = True)
+            self.update_index()
 
         if self.is_final_layer():
             print(self.strategy)
