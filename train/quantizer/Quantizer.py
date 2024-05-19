@@ -504,7 +504,7 @@ class Quantizer(object):
                         node,
                         rewriters,
                         is_sign_preserving=isinstance(module, SIGN_PRESERVING_MODULES),
-                        quant_identity_map=quant_identity_map,
+                        quant_identity_map=output_quant_identity_map,
                         quant_act_map=quant_act_map,
                         unsigned_act_tuple=unsigned_act_tuple)
 

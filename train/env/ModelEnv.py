@@ -105,7 +105,7 @@ class ModelEnv(gym.Env):
         self.model = preprocess_for_quantize(self.model)
         measure_model(self.model, self.model_config['center_crop_shape'], 
                     self.model_config['center_crop_shape'], self.finetuner.in_channels)
-        
+    
         self.quantizable_idx = []
         self.layer_types = []
         self.num_quant_acts = 0
@@ -218,9 +218,9 @@ class ModelEnv(gym.Env):
         return obs, info
     
     def step(self, action):
+
         action = self.get_action(action)
         self.strategy.append(action)
-        self.num_actions += 1
 
         # if not all activations have been quantized
         if self.cur_ind < self.num_quant_acts:
@@ -233,11 +233,11 @@ class ModelEnv(gym.Env):
         # if activations have been quantized, quantize outputs and handle residuals
         if self.cur_ind == self.num_quant_acts:
             self.model = self.quantizer.quantize_output(self.model)
-            self.update_index()
-            
             self.model = self.quantizer.handle_residuals(self.model)
-            self.update_index()        
-            
+
+            # build index again, because quantize output and handle residuals can insert quantizers
+            self.update_index()
+        
         if self.cur_ind >= self.num_quant_acts:
             self.model = self.quantizer.quantize_layer(self.model, 
                                                        self.index_to_quantize, 
@@ -245,30 +245,25 @@ class ModelEnv(gym.Env):
             # build index again, because quanize layers can insert quantizers
             self.update_index()
 
-        if self.is_final_layer():
-            print(self.strategy)
-            self.quantizer.finalize(self.model)
-
         self.finetuner.model = self.model
         self.finetuner.model.to(self.finetuner.device)
 
-        # accuracy before finetuning
-        acc = self.finetuner.validate(eval = False)
-        
-        # can only calibrate if residuals are handled
-        if self.cur_ind >= self.num_quant_acts:
-            self.finetuner.calibrate()
+        self.finetuner.calibrate()
 
-        if self.num_actions % self.args.finetune_every == 0 or self.is_final_layer():
+        # finetune only after all layers have been quantized
+        if self.is_final_layer():
+            self.quantizer.finalize(self.model)
+            self.finetuner.validate()
             self.finetuner.init_finetuning_optim()
             self.finetuner.init_loss()
-
-            # if it is final layer train for 10 epochs
-            if self.is_final_layer():
-                self.finetuner.finetuning_epochs = 10
-            
             self.finetuner.finetune()
-            self.num_actions = 0
+        
+        acc = self.finetuner.validate(eval = False)
+
+        if acc < 25.0:
+            self.finetuner.init_finetuning_optim()
+            self.finetuner.init_loss
+            self.finetuner.finetune()
 
         self.action_running_mean = ((action[0]) / (self.max_bit) + (self.cur_ind) * self.action_running_mean) / (self.cur_ind + 1)
         reward = self.reward(acc, action[0])
@@ -276,7 +271,6 @@ class ModelEnv(gym.Env):
         if self.is_final_layer():
             obs = self.layer_embedding[self.cur_ind, :].copy()
             terminated = True
-            acc = self.finetuner.validate(eval = False)
             info = {"accuracy": acc}
             print(f'Accuracy: {acc}, Size: {self.action_running_mean}')
             return obs, reward, terminated, False, info
@@ -285,8 +279,10 @@ class ModelEnv(gym.Env):
         self.cur_ind += 1 
         self.index_to_quantize = self.quantizable_idx[self.cur_ind]
         obs = self.layer_embedding[self.cur_ind, :].copy()
+        if acc < 25.0:
+            acc = self.finetuner.validate(eval = False)
+
         self.prev_acc = acc
-        acc = self.finetuner.validate(eval = False)
         info = {"accuracy": acc}
         return obs, reward, terminated, False, info
         

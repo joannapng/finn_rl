@@ -14,7 +14,7 @@ class StopTrainingOnNoImprovementCallback(BaseCallback):
         if self.n_calls % self.check_freq == 0:
             # Retrieve training rewards
             training_rewards = self.locals['rewards']
-            mean_reward = np.mean(training_rewards[-100])
+            mean_reward = np.mean(training_rewards[-100:])
 
             if self.verbose > 0:
                 print(f"Mean reward: {mean_reward:.2f} - Best mean reward: {self.best_mean_reward:.2f}")
