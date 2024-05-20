@@ -34,10 +34,8 @@ class ModelEnv(gym.Env):
     def __init__(self, args, weights, model_config):
         self.args = args
 
-        self.observation_space = spaces.Box(low = 0.0, high = 1.0, shape=(5, ), dtype = np.float32)
+        self.observation_space = spaces.Box(low = 0.0, high = 1.0, shape=(6, ), dtype = np.float32)
         self.action_space = spaces.Box(low = -1.0, high = 1.0, shape = (1, ), dtype = np.float32)
-        self.num_objectives = 2
-        self.utility_weights = weights
 
         self.quantizable_acts = [
             nn.ReLU,
@@ -64,17 +62,20 @@ class ModelEnv(gym.Env):
 
         self.finetuner = Finetuner(args, model_config)
         self.model = copy.deepcopy(self.finetuner.model)
+        self.model_config = model_config
         self.orig_model = copy.deepcopy(self.model)
 
         self.cur_ind = 0
         self.strategy = [] # quantization strategy
         
         self.min_bit = args.min_bit
-        self.max_bit = args.max_bit   
-        self.best_reward = -math.inf
-        self.model_config = model_config
+        self.max_bit = args.max_bit
+        self.last_action = self.max_bit
         
-        self.build_index() # build the states for each layer
+        # init reward
+        self.best_reward = -math.inf
+        
+        self.build_state_embedding() # build the states for each layer
         self.index_to_quantize = self.quantizable_idx[self.cur_ind]
 
         self.quantizer = Quantizer(
@@ -93,21 +94,17 @@ class ModelEnv(gym.Env):
         )
     
         self.orig_acc = self.finetuner.orig_acc
-        self.prev_acc = self.orig_acc
-        self.action_running_mean = 0
+        
+        # get platform simulator
+        self.simulator = None
 
-    def build_index(self):
-        '''
-        Store the indices and the types of the layers that are quantizable
-        Construct the static part of the state
-        '''
-
+    def build_state_embedding(self):
         self.model = preprocess_for_quantize(self.model)
+
         measure_model(self.model, self.model_config['center_crop_shape'], 
                     self.model_config['center_crop_shape'], self.finetuner.in_channels)
     
         self.quantizable_idx = []
-        self.layer_types = []
         self.num_quant_acts = 0
         layer_embedding = []
 
@@ -118,7 +115,6 @@ class ModelEnv(gym.Env):
                 module = get_module(self.model, node.target)
                 if type(module) in self.quantizable_acts:
                     self.quantizable_idx.append(i)
-                    self.layer_types.append(type(module))
                     this_state.append([i])
                     this_state.append([1])
                     
@@ -131,7 +127,9 @@ class ModelEnv(gym.Env):
 
                     this_state.append([module.flops])
                     this_state.append([module.params])
+                    this_state.append([1.]) # last action
                     layer_embedding.append(np.hstack(this_state))
+        
         # number of activation layers
         self.num_quant_acts = len(self.quantizable_idx)
 
@@ -142,7 +140,6 @@ class ModelEnv(gym.Env):
                 module = get_module(self.model, node.target)
                 if type(module) in self.quantizable_layers:
                     self.quantizable_idx.append(i)
-                    self.layer_types.append(type(module))
                     this_state.append([i])
                     this_state.append([0])
 
@@ -161,6 +158,7 @@ class ModelEnv(gym.Env):
 
                     this_state.append([module.flops])
                     this_state.append([module.params])
+                    this_state.append([1.]) # last action
                     layer_embedding.append(np.hstack(this_state))
 
         layer_embedding = np.array(layer_embedding, dtype=np.float32)
@@ -174,32 +172,12 @@ class ModelEnv(gym.Env):
         
         self.layer_embedding = layer_embedding
 
-    def update_index(self):
-        idx = 0
-
-        # update activation indices
-        for i, node in enumerate(self.model.graph.nodes):
-            if node.op == 'call_module':
-                module = get_module(self.model, node.target)
-                if type(module) in self.quantizable_acts:
-                    self.layer_embedding[idx][0] = i
-                    idx += 1
-
-        # update compute indices
-        for i, node in enumerate(self.model.graph.nodes):
-            if node.op == 'call_module':
-                module = get_module(self.model, node.target)
-                if type(module) in self.quantizable_layers:
-                    self.layer_embedding[idx][0] = i
-                    idx += 1
-
     def reset(self, seed = None, option = None):
         super().reset(seed = seed)
 
-        self.model = copy.deepcopy(self.orig_model).to(self.finetuner.device)
-        self.model = preprocess_for_quantize(self.model)
-        self.model = self.quantizer.quantize_input(self.model)
-        self.build_index()
+        self.model = copy.deepcopy(self.orig_model).to(self.finetuner.device)        
+        self.build_state_embedding()
+
         self.model.to(self.finetuner.device)
 
         self.finetuner.model = self.model
@@ -209,17 +187,17 @@ class ModelEnv(gym.Env):
         
         self.cur_ind = 0
         self.index_to_quantize = self.quantizable_idx[self.cur_ind]
-        self.action_running_mean = 0
         self.strategy = []
-        self.num_actions = 0
-        self.prev_acc = self.max_bit # initialize prev action to maximum allowed bit
+
         obs = self.layer_embedding[0].copy()
         info = {"info": 0}
         return obs, info
-    
+
+    '''    
     def step(self, action):
 
         action = self.get_action(action)
+        self.last_action = action
         self.strategy.append(action)
 
         # if not all activations have been quantized
@@ -259,20 +237,13 @@ class ModelEnv(gym.Env):
             self.finetuner.finetune()
         
         acc = self.finetuner.validate(eval = False)
-
-        if acc < 25.0:
-            self.finetuner.init_finetuning_optim()
-            self.finetuner.init_loss
-            self.finetuner.finetune()
-
-        self.action_running_mean = ((action[0]) / (self.max_bit) + (self.cur_ind) * self.action_running_mean) / (self.cur_ind + 1)
         reward = self.reward(acc, action[0])
 
         if self.is_final_layer():
             obs = self.layer_embedding[self.cur_ind, :].copy()
             terminated = True
             info = {"accuracy": acc}
-            print(f'Accuracy: {acc}, Size: {self.action_running_mean}')
+            print(f'Accuracy: {acc}')
             return obs, reward, terminated, False, info
         
         terminated = False
@@ -285,20 +256,79 @@ class ModelEnv(gym.Env):
         self.prev_acc = acc
         info = {"accuracy": acc}
         return obs, reward, terminated, False, info
+    '''
+
+    def step(self, action):
+        action = self.get_action(action)
+        self.last_action = action
+        self.strategy.append([self.last_action])
+
+        if self.is_final_layer():
+            # check if model is feasible
+            # TODO: return how much the model exceeds resources (maybe)
+            self.final_action_wall()
+
+            # quantize model
+            self.quantizer.quantize_model(self.strategy)
+
+            # calibrate model 
+            self.finetuner.model = self.model 
+            self.finetuner.model.to(self.finetuner.device)
+            self.finetuner.calibrate()
+
+            # finetuner model
+            self.finetuner.init_finetuning_optim()
+            self.finetuner.init_loss()
+            self.finetuner.finetune()
+
+            # validate model
+            acc = self.finetuner.validate()
+            reward = self.reward(acc)
+
+            if reward > self.best_reward:
+                self.best_reward = reward
+            
+            obs = self.layer_embedding[self.cur_ind, :].copy()
+            done = True
+            info = {}
+            return obs, reward, True, False, info 
         
-    def reward(self, acc, action):
-        # in the case we have an increase in performance prev_acc - acc < 0 so r1 > 1
-        r1 = (1 - (self.prev_acc - acc) / self.prev_acc) * 100
-        r2 = - action / self.max_bit * 100
+        reward = 0 
+        done = False
 
-        return (np.array([r1, r2]) * self.utility_weights).sum()
+        self.cur_ind += 1
+        self.index_to_quantize = self.quantizable_idx[self.cur_ind]
+        self.layer_embedding[self.cur_ind][-1] = float(self.last_action)
+        obs = self.layer_embedding[self.cur_ind, :].copy()
+        info = {}
+        return obs, reward, False, False, info
 
+    def reward(self, acc):
+        return (acc - self.org_acc) * 0.1
+        
     def get_action(self, action):
-        action = action.astype(np.float32)
-        lbound, rbound = self.min_bit, self.max_bit
-        action = (action + 1) * (rbound - lbound) / 2.0 + self.min_bit - 0.5
-        action = np.ceil(action).astype(int)
+        action = float(action[0])
+        lbound, rbound = self.min_bit - 0.5, self.max_bit + 0.5
+        action = (rbound - lbound) * action + lbound
+        action = int(np.round(action, 0))
         return action
 
     def is_final_layer(self):
         return self.cur_ind == len(self.quantizable_idx) - 1
+    
+    def final_action_wall(self):
+        # quantize model with the original strategy
+        model_for_measure = copy.deepcopy(self.model)
+        model_for_measure = self.quantizer.quantize_model(model_for_measure,
+                                                          self.quantizable_idx,
+                                                          self.num_quant_acts)
+        
+        # convert qonnx to finn, streamline and convert to hw
+
+        # get original resources
+
+        # if resources exceed, reduce the bitwidth and quantize again
+        
+        # if resources exceed, start from the end, reduce the bitwidth and quantize again
+        # return the final strategy
+        pass

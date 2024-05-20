@@ -180,8 +180,6 @@ INPUT_QUANT_MAP = {
                 'per_tensor': {
                     'sym': Fp8e4m3ActPerTensorFloat},}}}}
 
-
-
 class Quantizer(object):
     def __init__(
             self,
@@ -360,13 +358,36 @@ class Quantizer(object):
 
         return quant_layer_map, quant_act_map, quant_identity_map
     
-    def quantize_input(self,
-                        model):
-        
+    def quantize_model(self, model, strategy, quantizable_idx, num_quant_acts):
         ignore_missing_keys_state = config.IGNORE_MISSING_KEYS
         config.IGNORE_MISSING_KEYS = True
         training_state = model.training
         model.eval()
+
+        # quantize input
+        model = self.quantize_input(model)
+
+        # quantize activations
+        for i in range(num_quant_acts):
+            model = self.quantize_act(model, quantizable_idx[i], int(strategy[i]))
+
+        # quantize add outputs and handle residuals
+        self.quantize_output(model)
+        self.handle_residuals(model)
+
+        # quantize compute layers
+        for i in range(num_quant_acts, len(quantizable_idx)):
+            model = self.quantize_layer(model, quantizable_idx[i], int(strategy[i]))
+
+        model = DisableLastReturnQuantTensor().apply(model)
+
+        model.train(training_state)
+        config.IGNORE_MISSING_KEYS = ignore_missing_keys_state
+
+        return model
+
+    def quantize_input(self,
+                        model):
 
         # Input quantizer fixed at 8 bits
         input_quantizer = (qnn.QuantIdentity, {'act_quant' : CommonActQuant,
@@ -375,9 +396,6 @@ class Quantizer(object):
                                                'scaling_impl_type' : ScalingImplType.CONST})
         
         model = inp_placeholder_handler(model, input_quantizer)
-
-        model.train(training_state)
-        config.IGNORE_MISSING_KEYS = ignore_missing_keys_state
         return model
 
     def quantize_act(self,
@@ -385,11 +403,6 @@ class Quantizer(object):
                      act_idx, 
                      act_bit_width):
         
-        ignore_missing_keys_state = config.IGNORE_MISSING_KEYS
-        config.IGNORE_MISSING_KEYS = True
-        training_state = model.training
-        model.eval()
-
         layer_map = self.quantize_kwargs['quant_act_map']
 
         for i, node in enumerate(model.graph.nodes):
@@ -418,18 +431,10 @@ class Quantizer(object):
                     break
             
         model = rewriter.apply(model)
-
-        model.train(training_state)
-        config.IGNORE_MISSING_KEYS = ignore_missing_keys_state
-
         return model
          
     def quantize_output(self,
                         model):
-        ignore_missing_keys_state = config.IGNORE_MISSING_KEYS
-        config.IGNORE_MISSING_KEYS = True
-        training_state = model.training
-        model.eval()
 
         quant_identity_map = self.quantize_kwargs['quant_identity_map']
         quant_act_map = self.quantize_kwargs['quant_act_map']
@@ -438,18 +443,10 @@ class Quantizer(object):
         model = add_output_quant_handler(
             model, quant_identity_map, quant_act_map, unsigned_act_tuple
         )
-        
-        model.train(training_state)
-        config.IGNORE_MISSING_KEYS = ignore_missing_keys_state
-        
         return model
 
     def handle_residuals(self,
                         model):
-        ignore_missing_keys_state = config.IGNORE_MISSING_KEYS
-        config.IGNORE_MISSING_KEYS = True
-        training_state = model.training
-        model.eval()
 
         quant_identity_map = self.quantize_kwargs['quant_identity_map']
         quant_act_map = self.quantize_kwargs['quant_act_map']
@@ -459,20 +456,12 @@ class Quantizer(object):
             model, quant_identity_map, quant_act_map, unsigned_act_tuple, align_input_quant
         )
 
-        model.train(training_state)
-        config.IGNORE_MISSING_KEYS = ignore_missing_keys_state
-
         return model
         
     def quantize_layer(self,
                        model,
                        layer_idx,
                        weight_bit_width):
-        
-        ignore_missing_keys_state = config.IGNORE_MISSING_KEYS
-        config.IGNORE_MISSING_KEYS = True
-        training_state = model.training
-        model.eval()
 
         layer_map = self.quantize_kwargs['compute_layer_map']
         quant_identity_map = self.quantize_kwargs['quant_identity_map']
@@ -536,20 +525,4 @@ class Quantizer(object):
         for rewriter in rewriters:
             model = rewriter.apply(model)
 
-        model.train(training_state)
-        config.IGNORE_MISSING_KEYS = ignore_missing_keys_state
-
-        return model
-    
-    def finalize(self,
-                 model):
-        ignore_missing_keys_state = config.IGNORE_MISSING_KEYS
-        config.IGNORE_MISSING_KEYS = True
-        training_state = model.training
-        model.eval()
-
-        model = DisableLastReturnQuantTensor().apply(model)
-
-        model.train(training_state)
-        config.IGNORE_MISSING_KEYS = ignore_missing_keys_state
         return model
