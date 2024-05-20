@@ -1,5 +1,6 @@
 import copy
 import math
+from venv import create
 import gymnasium as gym
 import torch
 import torch.nn as nn
@@ -12,10 +13,29 @@ import brevitas.nn as qnn
 
 from ..quantizer import Quantizer
 from ..finetune import Finetuner
+from ..exporter.Exporter import (
+    tidy_up,
+    preprocessing,
+    postprocessing,
+    make_input_channels_last,
+    qonnx_to_finn,
+    create_dataflow_partition,
+    specialize_layers,
+    target_fps_parallelization,
+    apply_folding_config,
+    minimize_bit_width,
+    resource_estimates,
+    streamline_resnet,
+    convert_to_hw_resnet,
+    name_nodes
+)
 from ..utils import measure_model
 
 from gymnasium import spaces
 from stable_baselines3.common.env_checker import check_env
+
+import brevitas.onnx as bo
+from qonnx.core.modelwrapper import ModelWrapper
 
 class LayerTypes(IntEnum):
     LINEAR = 0
@@ -31,7 +51,7 @@ class ActTypes(IntEnum):
     SIGMOID = 2
 
 class ModelEnv(gym.Env):
-    def __init__(self, args, weights, model_config):
+    def __init__(self, args, model_config):
         self.args = args
 
         self.observation_space = spaces.Box(low = 0.0, high = 1.0, shape=(6, ), dtype = np.float32)
@@ -175,7 +195,7 @@ class ModelEnv(gym.Env):
     def reset(self, seed = None, option = None):
         super().reset(seed = seed)
 
-        self.model = copy.deepcopy(self.orig_model).to(self.finetuner.device)        
+        self.model = copy.deepcopy(self.orig_model).to(self.finetuner.device)
         self.build_state_embedding()
 
         self.model.to(self.finetuner.device)
@@ -193,75 +213,11 @@ class ModelEnv(gym.Env):
         info = {"info": 0}
         return obs, info
 
-    '''    
-    def step(self, action):
-
-        action = self.get_action(action)
-        self.last_action = action
-        self.strategy.append(action)
-
-        # if not all activations have been quantized
-        if self.cur_ind < self.num_quant_acts:
-            self.model = self.quantizer.quantize_act(
-                self.model,
-                self.index_to_quantize,
-                int(action[0])
-            )
-        
-        # if activations have been quantized, quantize outputs and handle residuals
-        if self.cur_ind == self.num_quant_acts:
-            self.model = self.quantizer.quantize_output(self.model)
-            self.model = self.quantizer.handle_residuals(self.model)
-
-            # build index again, because quantize output and handle residuals can insert quantizers
-            self.update_index()
-        
-        if self.cur_ind >= self.num_quant_acts:
-            self.model = self.quantizer.quantize_layer(self.model, 
-                                                       self.index_to_quantize, 
-                                                       int(action[0]))
-            # build index again, because quanize layers can insert quantizers
-            self.update_index()
-
-        self.finetuner.model = self.model
-        self.finetuner.model.to(self.finetuner.device)
-
-        self.finetuner.calibrate()
-
-        # finetune only after all layers have been quantized
-        if self.is_final_layer():
-            self.quantizer.finalize(self.model)
-            self.finetuner.validate()
-            self.finetuner.init_finetuning_optim()
-            self.finetuner.init_loss()
-            self.finetuner.finetune()
-        
-        acc = self.finetuner.validate(eval = False)
-        reward = self.reward(acc, action[0])
-
-        if self.is_final_layer():
-            obs = self.layer_embedding[self.cur_ind, :].copy()
-            terminated = True
-            info = {"accuracy": acc}
-            print(f'Accuracy: {acc}')
-            return obs, reward, terminated, False, info
-        
-        terminated = False
-        self.cur_ind += 1 
-        self.index_to_quantize = self.quantizable_idx[self.cur_ind]
-        obs = self.layer_embedding[self.cur_ind, :].copy()
-        if acc < 25.0:
-            acc = self.finetuner.validate(eval = False)
-
-        self.prev_acc = acc
-        info = {"accuracy": acc}
-        return obs, reward, terminated, False, info
-    '''
-
     def step(self, action):
         action = self.get_action(action)
+        print(action)
         self.last_action = action
-        self.strategy.append([self.last_action])
+        self.strategy.append(self.last_action)
 
         if self.is_final_layer():
             # check if model is feasible
@@ -308,9 +264,9 @@ class ModelEnv(gym.Env):
         
     def get_action(self, action):
         action = float(action[0])
-        lbound, rbound = self.min_bit - 0.5, self.max_bit + 0.5
-        action = (rbound - lbound) * action + lbound
-        action = int(np.round(action, 0))
+        lbound, rbound = self.min_bit, self.max_bit
+        action = (action + 1) * (rbound - lbound) / 2.0 + self.min_bit - 0.5
+        action = np.ceil(action).astype(int)
         return action
 
     def is_final_layer(self):
@@ -320,9 +276,30 @@ class ModelEnv(gym.Env):
         # quantize model with the original strategy
         model_for_measure = copy.deepcopy(self.model)
         model_for_measure = self.quantizer.quantize_model(model_for_measure,
+                                                          self.strategy,
                                                           self.quantizable_idx,
                                                           self.num_quant_acts)
         
+        # export model to qonnx
+        img_shape = self.model_config['center_crop_shape']
+        device, dtype = next(model_for_measure.parameters()).device, next(model_for_measure.parameters()).dtype
+        ref_input = torch.randn(1, 3, img_shape, img_shape, device = device, dtype = dtype)
+        bo.export_qonnx(model_for_measure, ref_input, export_path = 'model.onnx', keep_initializers_as_inputs = False, opset_version = 11)
+        
+        model = ModelWrapper('model.onnx')
+        model = preprocessing(model)
+        model = postprocessing(model)
+        model = make_input_channels_last(model)
+        model = tidy_up(model)
+        model = qonnx_to_finn(model)
+        model = streamline_resnet(model)
+        model = convert_to_hw_resnet(model)
+        model = create_dataflow_partition(model)
+        model = specialize_layers(model, self.args.fpga_part)
+        model = target_fps_parallelization(model, self.args.synth_clk_period_ns, self.args.target_fps)
+        model = apply_folding_config(model)
+        resources = resource_estimates(model)
+        print(resources)
         # convert qonnx to finn, streamline and convert to hw
 
         # get original resources

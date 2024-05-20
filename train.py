@@ -11,6 +11,7 @@ from train.callbacks.StopTrainingOnNoImprovementCallback import StopTrainingOnNo
 from stable_baselines3 import A2C, DDPG, PPO, SAC, TD3
 from copy import deepcopy
 import multiprocessing as mp
+from finn.util.basic import part_map, alveo_default_platform
 
 rl_algorithms = {
     'A2C': A2C,
@@ -84,49 +85,31 @@ parser.add_argument('--min-bit', type=int, default=1, help = 'Minimum bit width 
 parser.add_argument('--max-bit', type=int, default=8, help = 'Maximum bit width (default: 8)')
 
 ### ----- AGENT ------ ###
-parser.add_argument('--num-agents', default = 5, type = int, help = 'Number of agents')
 parser.add_argument('--agent', default = 'TD3', choices = ['A2C', 'DDPG', 'PPO', 'SAC', 'TD3'], help = 'Choose algorithm to train agent')
 parser.add_argument('--noise', default = 0.1, type = float, help = 'Std for added noise in agent')
 parser.add_argument('--num-episodes', default = 100, type = int, help = 'Number of episodes (passes over the entire network) to train the agent for')
 parser.add_argument('--log-every', default = 10, type = int, help = 'How many episodes to wait to log agent')
-    
-def get_weights(num_agents):
-    weights = []
 
-    for i in range(num_agents):
-        w2 = i * 1 / num_agents
-        w1 = 1 - w2
-        weights.append([w1, w2])
-    
-    return weights
+### --- DESIGN --- ###
+parser.add_argument('--synth-clk-period-ns', type = float, default = 10.0, help = 'Target clock period in ns')
+parser.add_argument('--board', default = "U250", help = "Name of target board")
+parser.add_argument('--shell-flow-type', default = "vitis_alveo", choices = ["vivado_zynq", "vitis_alveo"], help = "Target shell type")
+parser.add_argument('--target-fps', type = int, default = 100000, help = 'Target fps')
+
 
 def main():
     args = parser.parse_args()
-    num_agents = args.num_agents
-    envs = []
-    eval_envs = []
-    agents = []
-    weights = get_weights(num_agents)
+    args.fpga_part = part_map[args.board]
 
-    for i in range(num_agents):
-        env = ModelEnv(args, np.array(weights[i]), get_model_config(args.model_name, args.custom_model_name, args.dataset))
-        eval_env = deepcopy(env)
-        envs.append(Monitor(env, f'agent_{weights[i][0]}_{weights[i][1]}', info_keywords = ('accuracy',)))
-        eval_envs.append(eval_env)
-
-        n_actions = envs[-1].action_space.shape[-1]
-        action_noise = NormalActionNoise(mean=np.zeros(n_actions), sigma=args.noise * np.ones(n_actions))
-
-        agent = rl_algorithms[args.agent]
-        agents.append(agent("MlpPolicy", envs[-1], action_noise = action_noise, verbose = 1))
-    
-    for i, agent in enumerate(agents):
-        stop_train_callback = StopTrainingOnNoImprovementCallback(check_freq=500, patience = 3)
-
-        agent.learn(total_timesteps=len(env.quantizable_idx) * args.num_episodes, 
-                    log_interval=args.log_every,
-                    callback=stop_train_callback)
-        agent.save("agents/agent_{}_{}".format(weights[i][0], weights[i][1]))
+    env = ModelEnv(args, get_model_config(args.model_name, args.custom_model_name, args.dataset))
+    n_actions = env.action_space.shape[-1]
+    action_noise = NormalActionNoise(mean=np.zeros(n_actions), sigma=args.noise * np.ones(n_actions))
+    agent = rl_algorithms[args.agent]("MlpPolicy", env, action_noise = action_noise, verbose = 1)
+    stop_train_callback = StopTrainingOnNoImprovementCallback(check_freq=500, patience = 3)
+    agent.learn(total_timesteps=len(env.quantizable_idx) * args.num_episodes, 
+                log_interval=args.log_every,
+                callback=stop_train_callback)
+    agent.save("agents/agent")
     
 if __name__ == "__main__":
     main()

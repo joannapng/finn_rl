@@ -237,6 +237,30 @@ class Quantizer(object):
 
         self.layer_rewriters = []
 
+        self.quantizable_acts = [
+            nn.ReLU,
+            nn.ReLU6,
+            nn.Sigmoid,
+            qnn.QuantReLU,
+            qnn.QuantSigmoid
+        ]
+
+        self.quantizable_layers = [
+            nn.Linear,
+            nn.MultiheadAttention,
+            nn.Conv1d,
+            nn.Conv2d,
+            nn.ConvTranspose1d,
+            nn.ConvTranspose2d,
+            qnn.QuantLinear,
+            qnn.QuantMultiheadAttention,
+            qnn.QuantConv1d,
+            qnn.QuantConv2d,
+            qnn.QuantConvTranspose1d,
+            qnn.QuantConvTranspose2d
+        ]
+
+
     def create_quant_maps(
             self,
             bias_bit_width,
@@ -263,7 +287,8 @@ class Quantizer(object):
         weight_bit_width_dict = {'bit_width' : weight_bit_width}
         act_bit_width_dict = {'bit_width': act_bit_width}
 
-        bias_quant = BIAS_BIT_WIDTH_MAP[bias_bit_width] if act_bit_width is not None else None
+        #bias_quant = BIAS_BIT_WIDTH_MAP[bias_bit_width] if act_bit_width is not None else None
+        bias_quant = None
         weight_quant = WEIGHT_QUANT_MAP[weight_quant_format][weight_scale_type][weight_param_method][weight_quant_granularity][weight_quant_type]
         weight_quant = weight_quant.let(**weight_bit_width_dict)
 
@@ -366,6 +391,7 @@ class Quantizer(object):
 
         # quantize input
         model = self.quantize_input(model)
+        quantizable_idx = self.update_index(model, quantizable_idx)
 
         # quantize activations
         for i in range(num_quant_acts):
@@ -374,6 +400,7 @@ class Quantizer(object):
         # quantize add outputs and handle residuals
         self.quantize_output(model)
         self.handle_residuals(model)
+        quantizable_idx = self.update_index(model, quantizable_idx)
 
         # quantize compute layers
         for i in range(num_quant_acts, len(quantizable_idx)):
@@ -385,6 +412,27 @@ class Quantizer(object):
         config.IGNORE_MISSING_KEYS = ignore_missing_keys_state
 
         return model
+
+    def update_index(self, model, quantizable_idx):
+        idx = 0
+
+        # update activation indices
+        for i, node in enumerate(model.graph.nodes):
+            if node.op == 'call_module':
+                module = get_module(model, node.target)
+                if type(module) in self.quantizable_acts:
+                    quantizable_idx[idx] = i
+                    idx += 1
+
+        # update compute indices
+        for i, node in enumerate(model.graph.nodes):
+            if node.op == 'call_module':
+                module = get_module(model, node.target)
+                if type(module) in self.quantizable_layers:
+                    quantizable_idx[idx] = i
+                    idx += 1
+
+        return quantizable_idx
 
     def quantize_input(self,
                         model):
