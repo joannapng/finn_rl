@@ -16,6 +16,7 @@ import brevitas.nn as qnn
 from ..quantizer import Quantizer
 from ..finetune import Finetuner
 from ..exporter.Exporter import (
+    set_fifo_depths,
     tidy_up,
     preprocessing,
     postprocessing,
@@ -228,7 +229,7 @@ class ModelEnv(gym.Env):
             # check if model is feasible
             # TODO: return how much the model exceeds resources (maybe)
             print(self.strategy)
-            self.final_action_wall()
+            penalty = self.final_action_wall()
             print(self.strategy)
             # quantize model
             self.model, _ = self.quantizer.quantize_model(  self.model,
@@ -249,7 +250,7 @@ class ModelEnv(gym.Env):
 
             # validate model
             acc = self.finetuner.validate()
-            reward = self.reward(acc)
+            reward = self.reward(acc, penalty)
 
             if reward > self.best_reward:
                 self.best_reward = reward
@@ -269,8 +270,8 @@ class ModelEnv(gym.Env):
         info = {}
         return obs, reward, False, False, info
 
-    def reward(self, acc):
-        return (acc - self.orig_acc) * 0.1
+    def reward(self, acc, penalty):
+        return (acc - self.orig_acc + penalty) * 0.1
         
     def get_action(self, action):
         action = float(action[0])
@@ -312,6 +313,7 @@ class ModelEnv(gym.Env):
         model = specialize_layers(model, self.args.fpga_part)
         model = target_fps_parallelization(model, self.args.synth_clk_period_ns, self.args.max_target_fps)
         model = apply_folding_config(model)
+        model = minimize_bit_width(model)
         resources = resource_estimates(model)
 
         # TODO: Resolve platform
@@ -320,6 +322,7 @@ class ModelEnv(gym.Env):
 
         print(resources)
         print(available_resources)
+        
         resources = list(resources.values())
         available_resources = list(available_resources.values())
         if np.any(resources > available_resources):
@@ -327,39 +330,9 @@ class ModelEnv(gym.Env):
         else:
             print(f'Design feasible for target_fps: {target_fps}')
         
-        target_fps = self.args.min_target_fps
-        model = ModelWrapper('model.onnx')
-        model = preprocessing(model)
-        model = postprocessing(model)
-        model = make_input_channels_last(model)
-        model = tidy_up(model)
-        model = qonnx_to_finn(model)
-        model = streamline_resnet(model)
-        model = convert_to_hw_resnet(model)
-        model = create_dataflow_partition(model)
-        model = specialize_layers(model, self.args.fpga_part)
-        model = target_fps_parallelization(model, self.args.synth_clk_period_ns, self.args.min_target_fps)
-        model = apply_folding_config(model)
-        resources = resource_estimates(model)
-
-        # TODO: Resolve platform
-        f = open(platform_files[self.args.board])
-        available_resources = json.load(f)['resources']
-
-        print(resources)
-        print(available_resources)
-        resources = list(resources.values())
-        available_resources = list(available_resources.values())
-        if np.any(resources > available_resources):
-            print("Design not feasible")
-        else:
-            print(f'Design feasible for target_fps: {target_fps}')
-        
-        # convert qonnx to finn, streamline and convert to hw
-
-        # get original resources
-
-        # if resources exceed, reduce the bitwidth and quantize again
-        
-        # if resources exceed, start from the end, reduce the bitwidth and quantize again
-        # return the final strategy
+        resources = np.array(resources)
+        available_resources = np.array(available_resources)
+        overhead = available_resources - resources
+        penalty = np.sum([x for x in overhead if x < 0])
+        print(penalty)
+        return penalty

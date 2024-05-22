@@ -56,11 +56,24 @@ from finn.analysis.fpgadataflow.res_estimation import (
     res_estimation,
     res_estimation_complete,
 )
+from finn.transformation.fpgadataflow.set_fifo_depths import (
+    InsertAndSetFIFODepths,
+    RemoveShallowFIFOs,
+    SplitLargeFIFOs,
+)
+
+from finn.transformation.fpgadataflow.insert_dwc import InsertDWC
+from finn.transformation.fpgadataflow.insert_fifo import InsertFIFO
 
 from qonnx.transformation.general import ConvertSubToAdd, ConvertDivToMul
 import finn.transformation.streamline.collapse_repeated as collapse
 import finn.transformation.streamline.reorder as reorder
 from finn.analysis.fpgadataflow.op_and_param_counts import aggregate_dict_keys
+from finn.builder.build_dataflow_config import LargeFIFOMemStyle
+from train.exporter.utils import (
+	uram_efficiency_estimation,
+	bram_efficiency_estimation
+)
 
 def tidy_up(model):
 	model = model.transform(InferShapes())
@@ -156,7 +169,22 @@ def target_fps_parallelization(model, clk_period, target_fps, mvau_wwidth_max =1
             "depth_trigger_uram",
             "depth_trigger_bram",
         ]
-    
+	
+	for node in model.graph.node:
+		op_type = node.op_type
+		node = getCustomOp(node)
+		# TODO for vector activation
+		if op_type in ["MVAU_hls", "MVAU_rtl"]:
+			if bram_efficiency_estimation(node) < 0.25 and uram_efficiency_estimation(node) < 0.25:
+				node.set_nodeattr("mem_mode", "internal_embedded")
+			elif uram_efficiency_estimation(node) >= 0.25:
+				node.set_nodeattr("ram_style", "ultra")
+			else:
+				node.set_nodeattr("ram_style", "block")
+
+			if op_type == "MVAU_hls" and node.dsp_estimation() > 2000:
+				node.set_nodeattr("resType", "lut")
+
 	extract_model_config_to_json(model, "auto_folding_config.json", hw_attrs)
 	
 	return model
@@ -171,6 +199,36 @@ def minimize_bit_width(model):
 	model = model.transform(MinimizeWeightBitWidth())
 	model = model.transform(MinimizeAccumulatorWidth())
 	model = model.transform(InferDataTypes())
+
+	return model
+
+def set_fifo_depths(model):
+	extw_optypes = ["MVAU_hls", "MVAU_rtl", "VVAU_hls", "VVAU_rtl"]
+
+	model = model.transform(GiveUniqueNodeNames())
+	model = model.transform(GiveReadableTensorNames())
+
+	for node in model.graph.node:
+		op_type = node.op_type
+
+		node = getCustomOp(node)
+		ifd = node.get_nodeattr("inFIFODepths")
+		ofd = node.get_nodeattr("outFIFODepths")
+
+		for i in range(len(ifd)):
+			ifd[i] = np.prod(node.get_folded_input_shape(i)[:-1])
+			
+		for o in range(len(ofd)):
+			ofd[o] = np.prod(node.get_folded_output_shape(o)[:-1])
+			
+		node.set_nodeattr("inFIFODepths", ifd)
+		node.set_nodeattr("outFIFODepths", ofd)
+
+	model = model.transform(InsertDWC())
+	model = model.transform(InsertFIFO(create_shallow_fifos = True))
+		
+	model = model.transform(GiveUniqueNodeNames())
+	model = model.transform(GiveReadableTensorNames())
 
 	return model
 
