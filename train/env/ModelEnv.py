@@ -323,8 +323,8 @@ class ModelEnv(gym.Env):
         print(resources)
         print(available_resources)
         
-        resources = list(resources.values())
-        available_resources = list(available_resources.values())
+        resources = np.array(list(resources.values()))
+        available_resources = np.array(list(available_resources.values()))
         if np.any(resources > available_resources):
             print("Design not feasible")
         else:
