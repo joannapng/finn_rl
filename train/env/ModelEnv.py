@@ -1,5 +1,7 @@
 import copy
 import math
+import platform
+import json
 from venv import create
 import gymnasium as gym
 import torch
@@ -49,6 +51,10 @@ class ActTypes(IntEnum):
     RELU = 0
     RELU6 = 1
     SIGMOID = 2
+
+platform_path = './platforms'
+platform_files = {}
+platform_files['U250'] = f'{platform_path}/u250.json'
 
 class ModelEnv(gym.Env):
     def __init__(self, args, model_config):
@@ -215,17 +221,21 @@ class ModelEnv(gym.Env):
 
     def step(self, action):
         action = self.get_action(action)
-        print(action)
         self.last_action = action
         self.strategy.append(self.last_action)
 
         if self.is_final_layer():
             # check if model is feasible
             # TODO: return how much the model exceeds resources (maybe)
+            print(self.strategy)
             self.final_action_wall()
 
             # quantize model
-            self.quantizer.quantize_model(self.strategy)
+            self.quantizer.quantize_model(  self.model,
+                                            self.strategy,
+                                            self.quantizable_idx,
+                                            self.num_quant_acts)
+
 
             # calibrate model 
             self.finetuner.model = self.model 
@@ -260,7 +270,7 @@ class ModelEnv(gym.Env):
         return obs, reward, False, False, info
 
     def reward(self, acc):
-        return (acc - self.org_acc) * 0.1
+        return (acc - self.orig_acc) * 0.1
         
     def get_action(self, action):
         action = float(action[0])
@@ -274,6 +284,7 @@ class ModelEnv(gym.Env):
     
     def final_action_wall(self):
         # quantize model with the original strategy
+        
         model_for_measure = copy.deepcopy(self.model)
         model_for_measure = self.quantizer.quantize_model(model_for_measure,
                                                           self.strategy,
@@ -284,8 +295,11 @@ class ModelEnv(gym.Env):
         img_shape = self.model_config['center_crop_shape']
         device, dtype = next(model_for_measure.parameters()).device, next(model_for_measure.parameters()).dtype
         ref_input = torch.randn(1, 3, img_shape, img_shape, device = device, dtype = dtype)
-        bo.export_qonnx(model_for_measure, ref_input, export_path = 'model.onnx', keep_initializers_as_inputs = False, opset_version = 11)
-        
+        bo.export_qonnx(model_for_measure, ref_input, export_path = 'model.onnx', keep_initializers_as_inputs = False, opset_version = 11, verbose = False)
+    
+        # Transformations
+        # Check maximum fps
+        target_fps = self.args.max_target_fps
         model = ModelWrapper('model.onnx')
         model = preprocessing(model)
         model = postprocessing(model)
@@ -296,10 +310,51 @@ class ModelEnv(gym.Env):
         model = convert_to_hw_resnet(model)
         model = create_dataflow_partition(model)
         model = specialize_layers(model, self.args.fpga_part)
-        model = target_fps_parallelization(model, self.args.synth_clk_period_ns, self.args.target_fps)
+        model = target_fps_parallelization(model, self.args.synth_clk_period_ns, self.args.max_target_fps)
         model = apply_folding_config(model)
         resources = resource_estimates(model)
+
+        # TODO: Resolve platform
+        f = open(platform_files[self.args.board])
+        available_resources = json.load(f)['resources']
+
         print(resources)
+        print(available_resources)
+        resources = list(resources.values())
+        available_resources = list(available_resources.values())
+        if np.any(resources > available_resources):
+            print("Design not feasible")
+        else:
+            print(f'Design feasible for target_fps: {target_fps}')
+        
+        target_fps = self.args.min_target_fps
+        model = ModelWrapper('model.onnx')
+        model = preprocessing(model)
+        model = postprocessing(model)
+        model = make_input_channels_last(model)
+        model = tidy_up(model)
+        model = qonnx_to_finn(model)
+        model = streamline_resnet(model)
+        model = convert_to_hw_resnet(model)
+        model = create_dataflow_partition(model)
+        model = specialize_layers(model, self.args.fpga_part)
+        model = target_fps_parallelization(model, self.args.synth_clk_period_ns, self.args.min_target_fps)
+        model = apply_folding_config(model)
+        resources = resource_estimates(model)
+
+        # TODO: Resolve platform
+        f = open(platform_files[self.args.board])
+        available_resources = json.load(f)['resources']
+
+        print(resources)
+        print(available_resources)
+        resources = list(resources.values())
+        available_resources = list(available_resources.values())
+        if np.any(resources > available_resources):
+            print("Design not feasible")
+        else:
+            print(f'Design feasible for target_fps: {target_fps}')
+        
         # convert qonnx to finn, streamline and convert to hw
 
         # get original resources
@@ -308,4 +363,3 @@ class ModelEnv(gym.Env):
         
         # if resources exceed, start from the end, reduce the bitwidth and quantize again
         # return the final strategy
-        pass

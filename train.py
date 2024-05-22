@@ -94,8 +94,8 @@ parser.add_argument('--log-every', default = 10, type = int, help = 'How many ep
 parser.add_argument('--synth-clk-period-ns', type = float, default = 10.0, help = 'Target clock period in ns')
 parser.add_argument('--board', default = "U250", help = "Name of target board")
 parser.add_argument('--shell-flow-type', default = "vitis_alveo", choices = ["vivado_zynq", "vitis_alveo"], help = "Target shell type")
-parser.add_argument('--target-fps', type = int, default = 100000, help = 'Target fps')
-
+parser.add_argument('--min-target-fps', type = int, default = 60, help = 'Minimum target fps')
+parser.add_argument('--max-target-fps', type = int, default = 100000, help = 'Maximum target fps')
 
 def main():
     args = parser.parse_args()

@@ -287,8 +287,7 @@ class Quantizer(object):
         weight_bit_width_dict = {'bit_width' : weight_bit_width}
         act_bit_width_dict = {'bit_width': act_bit_width}
 
-        #bias_quant = BIAS_BIT_WIDTH_MAP[bias_bit_width] if act_bit_width is not None else None
-        bias_quant = None
+        bias_quant = BIAS_BIT_WIDTH_MAP[bias_bit_width] if act_bit_width is not None else None
         weight_quant = WEIGHT_QUANT_MAP[weight_quant_format][weight_scale_type][weight_param_method][weight_quant_granularity][weight_quant_type]
         weight_quant = weight_quant.let(**weight_bit_width_dict)
 
@@ -392,7 +391,7 @@ class Quantizer(object):
         # quantize input
         model = self.quantize_input(model)
         quantizable_idx = self.update_index(model, quantizable_idx)
-
+        
         # quantize activations
         for i in range(num_quant_acts):
             model = self.quantize_act(model, quantizable_idx[i], int(strategy[i]))
@@ -438,10 +437,9 @@ class Quantizer(object):
                         model):
 
         # Input quantizer fixed at 8 bits
-        input_quantizer = (qnn.QuantIdentity, {'act_quant' : CommonActQuant,
-                                               'bit_width' : 8,
-                                               'narrow_range' : False,
-                                               'scaling_impl_type' : ScalingImplType.CONST})
+        input_quantizer, input_quantizer_kwargs = self.quantize_kwargs['quant_identity_map']['signed']
+        input_quantizer_kwargs['bit_width'] = 8
+        input_quantizer = (input_quantizer, input_quantizer_kwargs)
         
         model = inp_placeholder_handler(model, input_quantizer)
         return model
@@ -548,6 +546,9 @@ class Quantizer(object):
                     if layer_map[type(module)] is not None:
                         quant_module_class, quant_module_kwargs = layer_map[type(module)]
                         quant_module_kwargs['weight_bit_width'] = weight_bit_width
+                        
+                        if module.bias is not None:
+                            quant_module_kwargs['bias_quant'] = None
 
                         if not are_inputs_quantized_and_aligned(
                             model, node, [], quant_act_map, same_sign = False
