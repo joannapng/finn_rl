@@ -184,8 +184,13 @@ def streamline_resnet(model):
 	model = model.transform(ConvertDivToMul())
 	model = model.transform(collapse.CollapseRepeatedMul())
 	model = model.transform(absorb.AbsorbSignBiasIntoMultiThreshold())
+
+	model = model.transform(absorb.Absorb1BitMulIntoConv())
+	model = model.transform(absorb.Absorb1BitMulIntoMatMul())
+	
 	model = model.transform(absorb.AbsorbAddIntoMultiThreshold())
 	model = model.transform(absorb.AbsorbMulIntoMultiThreshold())
+
 	model = model.transform(absorb.AbsorbScalarMulAddIntoTopK())
 
 	model = model.transform(reorder.MoveMulPastMaxPool())
@@ -215,6 +220,7 @@ def convert_to_hw_resnet(model):
 	model = model.transform(convert.InferChannelwiseLinearLayer())
 	model = model.transform(convert.InferConvInpGen())
 	model = model.transform(convert.InferQuantizedMatrixVectorActivation())
+	model = model.transform(convert.InferBinaryMatrixVectorActivation())
 
 	model = model.transform(absorb.AbsorbConsecutiveTransposes())
 	model = model.transform(reorder.MoveTransposePastFork())

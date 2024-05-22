@@ -229,9 +229,9 @@ class ModelEnv(gym.Env):
             # TODO: return how much the model exceeds resources (maybe)
             print(self.strategy)
             self.final_action_wall()
-
+            print(self.strategy)
             # quantize model
-            self.quantizer.quantize_model(  self.model,
+            self.model, _ = self.quantizer.quantize_model(  self.model,
                                             self.strategy,
                                             self.quantizable_idx,
                                             self.num_quant_acts)
@@ -284,13 +284,12 @@ class ModelEnv(gym.Env):
     
     def final_action_wall(self):
         # quantize model with the original strategy
-        
         model_for_measure = copy.deepcopy(self.model)
-        model_for_measure = self.quantizer.quantize_model(model_for_measure,
+        model_for_measure, self.strategy = self.quantizer.quantize_model(model_for_measure,
                                                           self.strategy,
                                                           self.quantizable_idx,
                                                           self.num_quant_acts)
-        
+
         # export model to qonnx
         img_shape = self.model_config['center_crop_shape']
         device, dtype = next(model_for_measure.parameters()).device, next(model_for_measure.parameters()).dtype
@@ -308,6 +307,7 @@ class ModelEnv(gym.Env):
         model = qonnx_to_finn(model)
         model = streamline_resnet(model)
         model = convert_to_hw_resnet(model)
+        model.save('streamlined_model.onnx')
         model = create_dataflow_partition(model)
         model = specialize_layers(model, self.args.fpga_part)
         model = target_fps_parallelization(model, self.args.synth_clk_period_ns, self.args.max_target_fps)
