@@ -24,7 +24,7 @@ from ..exporter.Exporter import (
     qonnx_to_finn,
     create_dataflow_partition,
     specialize_layers,
-    target_fps_parallelization,
+    set_folding,
     apply_folding_config,
     minimize_bit_width,
     resource_estimates,
@@ -40,6 +40,10 @@ from stable_baselines3.common.env_checker import check_env
 import brevitas.onnx as bo
 from qonnx.core.modelwrapper import ModelWrapper
 
+platform_path = './platforms'
+platform_files = {}
+platform_files['U250'] = f'{platform_path}/u250.json'
+
 class LayerTypes(IntEnum):
     LINEAR = 0
     MHA = 1
@@ -52,10 +56,6 @@ class ActTypes(IntEnum):
     RELU = 0
     RELU6 = 1
     SIGMOID = 2
-
-platform_path = './platforms'
-platform_files = {}
-platform_files['U250'] = f'{platform_path}/u250.json'
 
 class ModelEnv(gym.Env):
     def __init__(self, args, model_config):
@@ -222,28 +222,32 @@ class ModelEnv(gym.Env):
             # TODO: return how much the model exceeds resources (maybe)
             print(self.strategy)
             penalty = self.final_action_wall()
-            print(self.strategy)
-            # quantize model
-            self.model, _ = self.quantizer.quantize_model(  self.model,
-                                            self.strategy,
-                                            self.quantizable_idx,
-                                            self.num_quant_acts)
+
+            if penalty == -10.0:
+                reward = penalty
+            else:
+                # quantize model
+                self.model, _ = self.quantizer.quantize_model(  self.model,
+                                                self.strategy,
+                                                self.quantizable_idx,
+                                                self.num_quant_acts)
 
 
-            # calibrate model 
-            self.finetuner.model = self.model 
-            self.finetuner.model.to(self.finetuner.device)
-            self.finetuner.calibrate()
+                # calibrate model 
+                self.finetuner.model = self.model 
+                self.finetuner.model.to(self.finetuner.device)
+                self.finetuner.calibrate()
 
-            # finetuner model
-            self.finetuner.init_finetuning_optim()
-            self.finetuner.init_loss()
-            self.finetuner.finetune()
+                # finetuner model
+                self.finetuner.init_finetuning_optim()
+                self.finetuner.init_loss()
+                self.finetuner.finetune()
 
-            # validate model
-            acc = self.finetuner.validate()
-            reward = self.reward(acc, penalty)
+                # validate model
+                acc = self.finetuner.validate()
+                reward = self.reward(acc, penalty)
 
+            print(reward)
             if reward > self.best_reward:
                 self.best_reward = reward
             
@@ -276,6 +280,7 @@ class ModelEnv(gym.Env):
         return self.cur_ind == len(self.quantizable_idx) - 1
     
     def final_action_wall(self):
+        penalty = 0.0
         # quantize model with the original strategy
         model_for_measure = copy.deepcopy(self.model)
         model_for_measure, self.strategy = self.quantizer.quantize_model(model_for_measure,
@@ -290,8 +295,6 @@ class ModelEnv(gym.Env):
         bo.export_qonnx(model_for_measure, ref_input, export_path = 'model.onnx', keep_initializers_as_inputs = False, opset_version = 11, verbose = False)
     
         # Transformations
-        # Check maximum fps
-        target_fps = self.args.max_target_fps
         model = ModelWrapper('model.onnx')
         model = preprocessing(model)
         model = postprocessing(model)
@@ -303,27 +306,11 @@ class ModelEnv(gym.Env):
         model.save('streamlined_model.onnx')
         model = create_dataflow_partition(model)
         model = specialize_layers(model, self.args.fpga_part)
-        model = target_fps_parallelization(model, self.args.synth_clk_period_ns, self.args.max_target_fps)
+        model, feasible_model = set_folding(model, self.args.synth_clk_period_ns, self.args.board)
+        
+        if not feasible_model:
+            penalty = -10.0
+        
         model = apply_folding_config(model)
-        resources = resource_estimates(model)
-
-        # TODO: Resolve platform
-        f = open(platform_files[self.args.board])
-        available_resources = json.load(f)['resources']
-
-        print(resources)
-        print(available_resources)
         
-        resources = np.array(list(resources.values()))
-        available_resources = np.array(list(available_resources.values()))
-        if np.any(resources > available_resources):
-            print("Design not feasible")
-        else:
-            print(f'Design feasible for target_fps: {target_fps}')
-        
-        resources = np.array(resources)
-        available_resources = np.array(available_resources)
-        overhead = available_resources - resources
-        penalty = np.sum([x for x in overhead if x < 0])
-        print(penalty)
         return penalty

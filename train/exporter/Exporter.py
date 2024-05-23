@@ -1,8 +1,9 @@
-from ast import mod
-from operator import contains
 import torch
 import torch
 import numpy as np
+import json
+import time
+from copy import deepcopy
 
 from qonnx.core.modelwrapper import ModelWrapper
 from qonnx.custom_op.registry import getCustomOp
@@ -70,10 +71,19 @@ import finn.transformation.streamline.collapse_repeated as collapse
 import finn.transformation.streamline.reorder as reorder
 from finn.analysis.fpgadataflow.op_and_param_counts import aggregate_dict_keys
 from finn.builder.build_dataflow_config import LargeFIFOMemStyle
+from samo.model import network
 from train.exporter.utils import (
 	uram_efficiency_estimation,
 	bram_efficiency_estimation
 )
+
+from samo.backend.finn import parser
+from samo.backend.finn.export import export
+from samo.optimiser.annealing import SimulatedAnnealing
+
+platform_path = './platforms'
+platform_files = {}
+platform_files['U250'] = f'{platform_path}/u250.json'
 
 def tidy_up(model):
 	model = model.transform(InferShapes())
@@ -146,6 +156,7 @@ def specialize_layers(model, fpga_part):
 	
 	return model
 
+'''
 def target_fps_parallelization(model, clk_period, target_fps, mvau_wwidth_max =100000):
 	n_clock_cycles_per_sec = 10**9 / clk_period
 	n_cycles_per_frame = int(n_clock_cycles_per_sec / target_fps)
@@ -158,18 +169,6 @@ def target_fps_parallelization(model, clk_period, target_fps, mvau_wwidth_max =1
 		)
 	)
 
-	hw_attrs = [
-            "PE",
-            "SIMD",
-            "parallel_window",
-            "ram_style",
-            "resType",
-            "mem_mode",
-            "runtime_writeable_weights",
-            "depth_trigger_uram",
-            "depth_trigger_bram",
-        ]
-	
 	for node in model.graph.node:
 		op_type = node.op_type
 		node = getCustomOp(node)
@@ -185,9 +184,99 @@ def target_fps_parallelization(model, clk_period, target_fps, mvau_wwidth_max =1
 			if op_type == "MVAU_hls" and node.dsp_estimation() > 2000:
 				node.set_nodeattr("resType", "lut")
 
+	hw_attrs = [
+            "PE",
+            "SIMD",
+            "parallel_window",
+            "ram_style",
+            "resType",
+            "mem_mode",
+            "runtime_writeable_weights",
+            "depth_trigger_uram",
+            "depth_trigger_bram",
+        ]
+	
+
 	extract_model_config_to_json(model, "auto_folding_config.json", hw_attrs)
 	
 	return model
+'''
+
+def set_folding(model, clk_period, board):
+	model = model.transform(GiveUniqueNodeNames())
+	model = model.transform(GiveReadableTensorNames())
+
+	for node in model.graph.node:
+		op_type = node.op_type
+		node = getCustomOp(node)
+		# TODO for vector activation
+		if op_type in ["MVAU_hls", "MVAU_rtl"]:
+			if bram_efficiency_estimation(node) < 0.25 and uram_efficiency_estimation(node) < 0.25:
+				node.set_nodeattr("mem_mode", "internal_embedded")
+			elif uram_efficiency_estimation(node) >= 0.25:
+				node.set_nodeattr("ram_style", "ultra")
+			else:
+				node.set_nodeattr("ram_style", "block")
+
+			if op_type == "MVAU_hls" and node.dsp_estimation() > 2000:
+				node.set_nodeattr("resType", "lut")
+
+	platform_file = 'platforms/u250.json'
+	with open(platform_file, "r") as f:
+		platform = json.load(f)
+
+	graph = parser.parse(model, platform, 1000 / clk_period)
+	graph.enable_reconf = False
+	graph.objective = "latency"
+
+	for partition in graph.partitions:
+		partition.reset()
+
+	opt = SimulatedAnnealing(graph)
+
+	opt.start_time = time.time()
+	can_split = True
+
+	while can_split:
+		can_split = False
+		for i in range(len(opt.network.partitions)):
+			valid_splits = opt.network.valid_splits(i)
+			network_copy = deepcopy(opt.network)
+			if valid_splits:
+				can_split = True
+				prev = opt.network.check_constraints()
+				opt.network.split(i, valid_splits[0])
+				if prev and not opt.network.check_constraints():
+					can_split = False
+					opt.network = network_copy
+
+	# initial design infeasible
+	if not opt.network.check_constraints():
+		return model, False
+	
+	opt.optimise()
+
+	if not opt.network.check_constraints():
+		return model, False
+	
+	opt.network.summary()
+	model = export(opt.network, model)
+
+	hw_attrs = [
+		"PE",
+		"SIMD",
+		"parallel_window",
+		"ram_style",
+		"resType",
+		"mem_mode",
+		"runtime_writeable_weights",
+		"depth_trigger_uram",
+		"depth_trigger_bram",
+	]
+	
+	extract_model_config_to_json(model, "auto_folding_config.json", hw_attrs)
+
+	return model, True
 
 def apply_folding_config(model):
 	model = model.transform(GiveUniqueNodeNames())
