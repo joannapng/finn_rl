@@ -43,9 +43,8 @@ parser.add_argument('--calib-subset', default = 0.1, type = float, help = 'Perce
 parser.add_argument('--finetuning-subset', default = 0.5, type = float, help = 'Percentage of dataset to use for finetuning')
 
 # Trainer Parameters
-parser.add_argument('--finetuning-epochs', default = 2, type = int, help = 'Finetuning epochs')
+parser.add_argument('--finetuning-epochs', default = 5, type = int, help = 'Finetuning epochs')
 parser.add_argument('--print-every', default = 100, type = int, help = 'How frequent to print progress')
-parser.add_argument('--finetune-every', default = 5, type = int, help = 'How many actions between finetuning')
 
 # Optimizer Parameters
 parser.add_argument('--optimizer', default = 'Adam', choices = ['Adam', 'SGD'], help = 'Optimizer')
@@ -63,24 +62,7 @@ parser.add_argument('--scale-factor-type', default='float_scale', choices=['floa
 parser.add_argument('--act-bit-width', default=4, type=int, help = 'Activations bit width (default: 4)')
 parser.add_argument('--weight-bit-width', default=4, type=int, help = 'Weight bit width (default: 4)')
 parser.add_argument('--bias-bit-width', default=8, choices=[32, 16, 8], help = 'Bias bit width (default: 8)')
-parser.add_argument('--act-quant-type', default='sym', choices=['sym', 'asym'], help = 'Activation quantization type (default: sym)')
-parser.add_argument('--weight-quant-type', default = 'sym', choices = ['sym', 'asym'], help = 'Weight quantization type (default: sym)')
-parser.add_argument('--weight-quant-granularity', default = 'per_tensor', choices = ['per_tensor', 'per_channel'], help = 'Activation Quantization type (default: per_tensor)')
-parser.add_argument('--weight-quant-calibration-type', default = 'stats', choices = ['stats', 'mse'], help = 'Weight quantization calibration type (default: stats)')
-parser.add_argument('--act-equalization', default = None, choices = ['fx', 'layerwise', 'None'], help = 'Activation equalization type (default: None)')
-parser.add_argument('-act-quant-calibration-type', default = 'stats', choices = ['stats', 'mse'], help = 'Activation quantization calibration type (default: stats)')
-parser.add_argument('--act-quant-percentile', default=99.999, type=float, help = 'Percentile to use for stats of activation quantization (default: 99.999)')
-parser.add_argument('--graph-eq-iterations', default = 20, type = int, help = 'Number of iterations for graph equalization (default: 20)')
-parser.add_argument('--learned-round-iters', default = 1000, type = int, help = 'Number of iterations for learned round for each layer (default: 1000)')
-parser.add_argument('--learned-round-lr', default = 1e-3, type = float, help = 'Learning rate for learned round (default: 1e-3)')
-parser.add_argument('--scaling-per-output-channel', default=True, action = 'store_true', help = 'Weight Scaling per output channel (default: enabled)')
 parser.add_argument('--bias-corr', default=True, action = 'store_true', help = 'Bias correction after calibration (default: enabled)')
-parser.add_argument('--graph-eq-merge-bias', default = True, action = 'store_true', help = 'Merge bias when performing graph equaltion (default: enabled)')
-parser.add_argument('--weight-narrow-range', default=False, help = 'Narrow range for weight quantization (default: enabled)')
-parser.add_argument('--gpfq-p', default=1.0, type=float, help='P parameter for GPFQ (default: 1.0)')
-parser.add_argument('--quant-format', default = 'int', choices = ['int', 'float'], help = 'Quantization format to use for weights and activations (default: int)')
-parser.add_argument('--merge-bn', default = True, help = 'Merge BN layers before quantizing the model (default: enabled)')
-
 parser.add_argument('--min-bit', type=int, default=1, help = 'Minimum bit width (default: 1)')
 parser.add_argument('--max-bit', type=int, default=8, help = 'Maximum bit width (default: 8)')
 

@@ -109,15 +109,7 @@ class ModelEnv(gym.Env):
             self.model,
             args.weight_bit_width,
             args.act_bit_width,
-            args.bias_bit_width,
-            args.weight_quant_granularity,
-            args.act_quant_percentile,
-            args.act_quant_type,
-            args.scale_factor_type,
-            args.quant_format,
-            args.act_quant_calibration_type,
-            args.weight_quant_calibration_type,
-            args.weight_quant_type
+            args.bias_bit_width
         )
     
         self.orig_acc = self.finetuner.orig_acc
@@ -313,7 +305,6 @@ class ModelEnv(gym.Env):
         model = specialize_layers(model, self.args.fpga_part)
         model = target_fps_parallelization(model, self.args.synth_clk_period_ns, self.args.max_target_fps)
         model = apply_folding_config(model)
-        model = minimize_bit_width(model)
         resources = resource_estimates(model)
 
         # TODO: Resolve platform

@@ -1,13 +1,9 @@
 from copy import deepcopy
-from pickle import TRUE
 import torch.nn as nn
-import brevitas
-import brevitas.nn as qnn
-import operator
 
+import brevitas.nn as qnn
 from brevitas.core.scaling.standalone import ParameterFromStatsFromParameterScaling
-from brevitas.quant.shifted_scaled_int import ShiftedUint8ActPerTensorFloat
-from brevitas.quant.scaled_int import Int16Bias, Int32Bias, Int8ActPerTensorFloat, Uint8ActPerTensorFloat, Int8WeightPerTensorFloat
+from brevitas.quant.scaled_int import Int16Bias, Int32Bias, Int8ActPerTensorFloat, Int8WeightPerTensorFloat
 from brevitas.nn.quant_layer import QuantWeightBiasInputOutputLayer as QuantWBIOL
 from brevitas.nn.quant_mha import QuantMultiheadAttention
 from brevitas import config
@@ -19,166 +15,21 @@ from brevitas.graph.base import InsertModuleCallAfter
 import torch
 from brevitas.graph.base import ModuleToModuleByInstance
 from brevitas.graph.base import ModuleInstanceToModuleInstance
-from brevitas.quant.experimental.float import Fp8e4m3ActPerTensorFloat
-from brevitas.quant.experimental.float import Fp8e4m3WeightPerChannelFloat
-from brevitas.quant.experimental.float import Fp8e4m3WeightPerChannelFloatMSE
-from brevitas.quant.experimental.float import Fp8e4m3WeightPerTensorFloat
-from brevitas.quant.experimental.float import Fp8e4m3WeightPerTensorFloatMSE
-from brevitas.quant.fixed_point import Int8ActPerTensorFixedPoint
-from brevitas.quant.fixed_point import Int8ActPerTensorFixedPointMSE
-from brevitas.quant.fixed_point import Int8WeightPerChannelFixedPoint
-from brevitas.quant.fixed_point import Int8WeightPerChannelFixedPointMSE
-from brevitas.quant.fixed_point import Int8WeightPerTensorFixedPoint
-from brevitas.quant.fixed_point import Int8WeightPerTensorFixedPointMSE
+
 from brevitas.quant.scaled_int import Int8ActPerTensorFloat
-from brevitas.quant.scaled_int import Int8ActPerTensorFloatMSE
-from brevitas.quant.scaled_int import Int8WeightPerChannelFloat
-from brevitas.quant.scaled_int import Int8WeightPerChannelFloatMSE
 from brevitas.quant.scaled_int import Int8WeightPerTensorFloat
-from brevitas.quant.scaled_int import Int8WeightPerTensorFloatMSE
 from brevitas.quant.scaled_int import Int16Bias
 from brevitas.quant.scaled_int import Int32Bias
 from brevitas.quant.scaled_int import Int8Bias
-from brevitas.quant.shifted_scaled_int import ShiftedUint8ActPerTensorFixedPoint
-from brevitas.quant.shifted_scaled_int import ShiftedUint8ActPerTensorFloat
-from brevitas.quant.shifted_scaled_int import ShiftedUint8ActPerTensorFloatMSE
-from brevitas.quant.shifted_scaled_int import ShiftedUint8WeightPerChannelFloat
-from brevitas.quant.shifted_scaled_int import ShiftedUint8WeightPerChannelFloatMSE
-from brevitas.quant.shifted_scaled_int import ShiftedUint8WeightPerTensorFloat
-from brevitas.quant.shifted_scaled_int import ShiftedUint8WeightPerTensorFloatMSE
 
 from brevitas.graph.standardize import DisableLastReturnQuantTensor
 from brevitas.graph.quantize_impl import SIGN_PRESERVING_MODULES
-from brevitas.core.scaling import ScalingImplType
-from brevitas.core.scaling.standalone import ConstScaling
-from brevitas.core.scaling.standalone import ParameterScaling
 
-from brevitas_examples.bnn_pynq.models.common import CommonActQuant
+from train.quantizer.utils import align_input_quant
 
-def align_input_quant(
-        module, shared_quant_identity, shared_quant_identity_name, quant_identity_map, align_sign):
-    """
-    Based on the input module, the function decides how to align its output.
-    """
-    # If it is a QuantIdentity already, simply modify tensor_quant or the scaling implementations
-    # based on whether we need to align the sign or not
-    if isinstance(module, qnn.QuantIdentity):
-        if align_sign or module.is_quant_act_signed == shared_quant_identity.is_quant_act_signed:
-            return shared_quant_identity
-        else:
-            assert not module.is_quant_act_signed and shared_quant_identity.is_quant_act_signed
-            quant_module_class, quant_module_kwargs = quant_identity_map['unsigned']
-            return (
-                quant_module_class,
-                {
-                    **quant_module_kwargs,
-                    'bit_width_impl': 
-                        shared_quant_identity.act_quant.fused_activation_quant_proxy.tensor_quant
-                        .msb_clamp_bit_width_impl,
-                    'scaling_impl':
-                        shared_quant_identity.act_quant.fused_activation_quant_proxy.tensor_quant
-                        .scaling_impl,
-                    'int_scaling_impl':
-                        shared_quant_identity.act_quant.fused_activation_quant_proxy.tensor_quant
-                        .int_scaling_impl})
-    elif hasattr(module, 'output_quant'):
-        return (type(module), {'output_quant': shared_quant_identity})
-    # If it is a QuantAct where the scaling can be determined through stats (thus through calibration),
-    # then adapt its act_quant according to align_sign.
-    elif hasattr(module, 'act_quant') and not isinstance(
-            module.act_quant.fused_activation_quant_proxy.tensor_quant.scaling_impl,
-        (ParameterScaling, ConstScaling)):
-        module_type = type(module)
-        if align_sign:
-            partial_config = {
-                'signed':
-                    shared_quant_identity.act_quant.is_signed,
-                'tensor_quant':
-                    shared_quant_identity.act_quant.fused_activation_quant_proxy.tensor_quant}
-        else:
-            partial_config = {
-                'bit_width_impl': 
-                    shared_quant_identity.act_quant.fused_activation_quant_proxy.tensor_quant
-                    .msb_clamp_bit_width_impl,
-                'scaling_impl':
-                    shared_quant_identity.act_quant.fused_activation_quant_proxy.tensor_quant
-                    .scaling_impl,
-                'int_scaling_impl':
-                    shared_quant_identity.act_quant.fused_activation_quant_proxy.tensor_quant
-                    .int_scaling_impl}
-        injector = module.act_quant.quant_injector.let(**partial_config)
-        return module_type(act_quant=injector, return_quant_tensor=True)
-    # In all other cases, return the name of the QuantIdentity that will be added at the output of
-    # the module
-    else:
-        return shared_quant_identity_name
-    
 BIAS_BIT_WIDTH_MAP = {32: Int32Bias, 16: Int16Bias, 8: Int8Bias, None: None}
 UNSIGNED_ACT_TUPLE = (nn.ReLU, nn.ReLU6, nn.Sigmoid, nn.Hardsigmoid)
-WEIGHT_QUANT_MAP = {
-    'int': {
-        'float_scale': {
-            'stats': {
-                'per_tensor': {
-                    'sym': Int8WeightPerTensorFloat, 'asym': ShiftedUint8WeightPerTensorFloat},
-                'per_channel': {
-                    'sym': Int8WeightPerChannelFloat, 'asym': ShiftedUint8WeightPerChannelFloat}},
-            'mse': {
-                'per_tensor': {
-                    'sym': Int8WeightPerTensorFloatMSE,
-                    'asym': ShiftedUint8WeightPerTensorFloatMSE},
-                'per_channel': {
-                    'sym': Int8WeightPerChannelFloatMSE,
-                    'asym': ShiftedUint8WeightPerChannelFloatMSE},},},
-        'po2_scale': {
-            'stats': {
-                'per_tensor': {
-                    'sym': Int8WeightPerTensorFixedPoint},
-                'per_channel': {
-                    'sym': Int8WeightPerChannelFixedPoint},},
-            'mse': {
-                'per_tensor': {
-                    'sym': Int8WeightPerTensorFixedPointMSE},
-                'per_channel': {
-                    'sym': Int8WeightPerChannelFixedPointMSE}},}},
-    'float': {
-        'float_scale': {
-            'stats': {
-                'per_tensor': {
-                    'sym': Fp8e4m3WeightPerTensorFloat},
-                'per_channel': {
-                    'sym': Fp8e4m3WeightPerChannelFloat}},
-            'mse': {
-                'per_tensor': {
-                    'sym': Fp8e4m3WeightPerTensorFloatMSE},
-                'per_channel': {
-                    'sym': Fp8e4m3WeightPerChannelFloatMSE}}}}}
 
-INPUT_QUANT_MAP = {
-    'int': {
-        'float_scale': {
-            'stats': {
-                'per_tensor': {
-                    'sym': Int8ActPerTensorFloat, 'asym': ShiftedUint8ActPerTensorFloat}},
-            'mse': {
-                'per_tensor': {
-                    'sym': Int8ActPerTensorFloatMSE, 'asym': ShiftedUint8ActPerTensorFloatMSE}}},
-        'po2_scale': {
-            'stats': {
-                'per_tensor': {
-                    'sym': Int8ActPerTensorFixedPoint, 'asym': ShiftedUint8ActPerTensorFixedPoint},
-            },
-            'mse': {
-                'per_tensor': {
-                    'sym': Int8ActPerTensorFixedPointMSE}},}},
-    'float': {
-        'float_scale': {
-            'stats': {
-                'per_tensor': {
-                    'sym': Fp8e4m3ActPerTensorFloat}},
-            'mse': {
-                'per_tensor': {
-                    'sym': Fp8e4m3ActPerTensorFloat},}}}}
 
 class Quantizer(object):
     def __init__(
@@ -187,24 +38,8 @@ class Quantizer(object):
             weight_bit_width,
             act_bit_width,
             bias_bit_width,
-            weight_quant_granularity,
-            act_quant_percentile,
-            act_quant_type,
-            scale_factor_type,
-            quant_format,
-            act_param_method,
-            weight_param_method,
-            weight_quant_type,
-            act_quant_granularity = 'per_tensor',
-            uint_sym_act_for_unsigned_values = True
     ):
         self.model = model
-        weight_scale_type = scale_factor_type
-        act_scale_type = scale_factor_type
-
-        weight_quant_format = quant_format
-        act_quant_format = quant_format
-
         weight_bit_width_dict = {}
         act_bit_width_dict = {}
         weight_bit_width_dict['weight_bit_width'] = weight_bit_width
@@ -213,20 +48,7 @@ class Quantizer(object):
         quant_layer_map, quant_act_map, quant_identity_map = self.create_quant_maps(
             bias_bit_width = bias_bit_width,
             weight_bit_width = weight_bit_width,
-            weight_param_method = weight_param_method,
-            weight_scale_type = weight_scale_type,
-            weight_quant_type = weight_quant_type,
-            weight_quant_granularity = weight_quant_granularity,
-            weight_narrow_range = True,
-            weight_quant_format = weight_quant_format,
-            act_quant_format = act_quant_format,
-            uint_sym_act_for_unsigned_values = True,
-            act_bit_width = act_bit_width,
-            act_scale_type = act_scale_type,
-            act_param_method = act_param_method,
-            act_quant_type = act_quant_type,
-            act_quant_granularity = act_quant_granularity,
-            act_quant_percentile = act_quant_percentile
+            act_bit_width = act_bit_width
         )
 
         self.quantize_kwargs = {
@@ -234,8 +56,6 @@ class Quantizer(object):
             'quant_act_map' : quant_act_map,
             'quant_identity_map' : quant_identity_map
         }
-
-        self.layer_rewriters = []
 
         self.quantizable_acts = [
             nn.ReLU,
@@ -265,20 +85,7 @@ class Quantizer(object):
             self,
             bias_bit_width,
             weight_bit_width,
-            weight_param_method,
-            weight_scale_type,
-            weight_quant_type,
-            weight_quant_granularity,
-            weight_narrow_range,
-            weight_quant_format,
-            act_quant_format,
-            uint_sym_act_for_unsigned_values = True,
-            act_bit_width = None,
-            act_scale_type = None,
-            act_param_method = None,
-            act_quant_type = None,
-            act_quant_granularity = None,
-            act_quant_percentile = None
+            act_bit_width
     ):
         
         def kwargs_prefix(prefix, weight_kwargs):
@@ -288,39 +95,40 @@ class Quantizer(object):
         act_bit_width_dict = {'bit_width': act_bit_width}
 
         bias_quant = BIAS_BIT_WIDTH_MAP[bias_bit_width] if act_bit_width is not None else None
-        weight_quant = WEIGHT_QUANT_MAP[weight_quant_format][weight_scale_type][weight_param_method][weight_quant_granularity][weight_quant_type]
+        weight_quant = Int8WeightPerTensorFloat
         weight_quant = weight_quant.let(**weight_bit_width_dict)
 
-        act_quant = INPUT_QUANT_MAP[act_quant_format][act_scale_type][act_param_method][act_quant_granularity][act_quant_type]
-        sym_act_quant = INPUT_QUANT_MAP[act_quant_format][act_scale_type][act_param_method][act_quant_granularity]['sym']
-        per_tensor_act_quant = INPUT_QUANT_MAP[act_quant_format][act_scale_type][act_param_method]['per_tensor'][act_quant_type]
+        act_quant = Int8ActPerTensorFloat
+        sym_act_quant =Int8ActPerTensorFloat
+        per_tensor_act_quant = Int8ActPerTensorFloat
+
         act_quant = act_quant.let(**act_bit_width_dict)
         sym_act_quant = sym_act_quant.let(**act_bit_width_dict)
         per_tensor_act_quant = per_tensor_act_quant.let(**act_bit_width_dict)
 
         weight_quant = weight_quant.let(
             **{
-                'narrow_range' : weight_narrow_range,
+                'narrow_range' : False,
                 'scaling_impl': ParameterFromStatsFromParameterScaling
             }
         )
 
         act_quant = act_quant.let(
             **{
-                'high_percentile_q': act_quant_percentile, 'dtype' : torch.float32,
+                'high_percentile_q': 99.999, 'dtype' : torch.float32,
                 'scaling_imp': ParameterFromStatsFromParameterScaling
             }
         )
 
         sym_act_quant = sym_act_quant.let(
             **{
-                'high_percentile_q': act_quant_percentile, 'dtype': torch.float32
+                'high_percentile_q': 99.999, 'dtype': torch.float32
             }
         )
 
         per_tensor_act_quant = per_tensor_act_quant.let(
             **{
-                'high_percentile_q': act_quant_percentile, 'dtype': torch.float32
+                'high_percentile_q': 99.999, 'dtype': torch.float32
             }
         )
 
@@ -355,9 +163,8 @@ class Quantizer(object):
         quant_act_kwargs = {'act_quant': act_quant, 'return_quant_tensor' : True}
         unsigned_quant_act_kwargs = quant_act_kwargs.copy()
 
-        if uint_sym_act_for_unsigned_values:
-            quant_mha_kwargs['attn_output_weights_signed'] = False
-            unsigned_quant_act_kwargs['signed'] = False
+        quant_mha_kwargs['attn_output_weights_signed'] = False
+        unsigned_quant_act_kwargs['signed'] = False
         
         quant_layer_map = {
         torch.nn.Linear: (qnn.QuantLinear, quant_wbiol_kwargs),
@@ -544,9 +351,12 @@ class Quantizer(object):
                                     quant_act_map=quant_act_map,
                                     unsigned_act_tuple=unsigned_act_tuple)
                     else:
-                        # for output quant
+                        # for output quant, keep it to 8 bits
                         output_quant_identity_map = deepcopy(quant_identity_map)
-                        output_quant_identity_map['bit_width'] = 8
+                        for n in node.users:
+                            if n.op == 'output':
+                                output_quant_identity_map['bit_width'] = 8
+
                         output_quant_handler(
                         model,
                         node,
