@@ -3,7 +3,15 @@ import qonnx.custom_op.registry as registry
 from finn.util.fpgadataflow import is_hls_node, is_rtl_node
 from finn.analysis.fpgadataflow.op_and_param_counts import aggregate_dict_keys
 
+from qonnx.transformation.general import (
+    GiveReadableTensorNames,
+    GiveUniqueNodeNames,
+)
+
 def set_defaults(model):
+	model = model.transform(GiveUniqueNodeNames())
+	model = model.transform(GiveReadableTensorNames())
+
 	for node in model.graph.node:
 		inst = registry.getCustomOp(node)
 		attrs = inst.get_nodeattr_types()
@@ -15,6 +23,9 @@ def set_defaults(model):
 			inst.set_nodeattr("SIMD", 1)
 
 def estimate_resources(model):
+	model = model.transform(GiveUniqueNodeNames())
+	model = model.transform(GiveReadableTensorNames())
+
 	res_dict = {}
 	for node in model.graph.node:
 		if is_hls_node(node) or is_rtl_node(node):
@@ -23,148 +34,244 @@ def estimate_resources(model):
 	
 	return res_dict
 
-def reduceBRAMUsage(model, resources_per_layer):
+def estimate_cycles(model):
+	model = model.transform(GiveUniqueNodeNames())
+	model = model.transform(GiveReadableTensorNames())
+
+	cycle_dict = {}
+	for node in model.graph.node:
+		if is_hls_node(node) or is_rtl_node(node):
+			inst = registry.getCustomOp(node)
+			cycle_dict[node.name] = int(inst.get_exp_cycles())
+	
+	return cycle_dict
+
+def reduceBRAMUsage(model, resources_per_layer, available_resources, max_iters = 100):
 	sorted_resources_per_layer = sorted(resources_per_layer.items(), key = lambda x : x[1]['BRAM_18K'], reverse = True)
 
-	for layer in sorted_resources_per_layer:
-		name, _ = layer
+	resources_total = aggregate_dict_keys(resources_per_layer)
 
-		node = model.get_node_from_name(name)
-		node_inst = registry.getCustomOp(node)
-		op_type = node.op_type
+	iters = 1
+	while iters < max_iters and resources_total['BRAM_18K'] > available_resources['BRAM_18K']:
+		iters += 1
 		
-		if op_type in ["MVAU_hls", "MVAU_rtl", "VVAU_hls", "VVAU_rtl"]:
-			mem_mode = node_inst.get_nodeattr("mem_mode")
-			if mem_mode != "internal_embedded" and node_inst.calc_wmem() <= 128:
-				node_inst.set_nodeattr("mem_mode", "internal_embedded")
-				break
-			elif mem_mode == "internal_decoupled":
-				node_inst.set_nodeattr("ram_style", "ultra")
-				if node_inst.uram_efficiency_estimation() < 0.1:
+		for layer in sorted_resources_per_layer:
+			name, _ = layer
+
+			node = model.get_node_from_name(name)
+			node_inst = registry.getCustomOp(node)
+			op_type = node.op_type
+			
+			if op_type in ["MVAU_hls", "MVAU_rtl", "VVAU_hls", "VVAU_rtl"]:
+				mem_mode = node_inst.get_nodeattr("mem_mode")
+				if mem_mode != "internal_embedded" and node_inst.calc_wmem() <= 128:
+					node_inst.set_nodeattr("mem_mode", "internal_embedded")
+					break
+				elif mem_mode == "internal_decoupled":
+					node_inst.set_nodeattr("ram_style", "ultra")
+					if node_inst.uram_efficiency_estimation() < 0.2:
+						node_inst.set_nodeattr("ram_style", "distributed")
+						break
+			elif op_type == "Channelwise_op_hls":
+				ram_style = node_inst.get_nodeattr("ram_style")
+				tmem = node_inst.calc_tmem()
+				if ram_style == "block" and tmem > 1:
 					node_inst.set_nodeattr("ram_style", "distributed")
 					break
-		elif op_type == "Channelwise_op_hls":
-			ram_style = node_inst.get_nodeattr("ram_style")
-			tmem = node_inst.calc_tmem()
-			if ram_style == "block" and tmem > 1:
-				node_inst.set_nodeattr("ram_style", "distributed")
-				break
-		elif op_type.startswith("ConvolutionInputGenerator"):
-			ram_style = node_inst.get_nodeattr("ram_style")
-			if ram_style != "distributed":
-				node_inst.set_nodeattr("ram_style", "distributed")
-				break
-		
-	return model
-
-def reduceDSPUsage(model, resources_per_layer):
-	sorted_resources_per_layer = sorted(resources_per_layer.items(), key = lambda x : x[1]['DSP'], reverse = True)
-	for layer in sorted_resources_per_layer:
-		name, _ = layer
-		node = model.get_node_from_name(name)
-		node_inst = registry.getCustomOp(node)
-		op_type = node.op_type
-		
-		if op_type in ["MVAU_hls", "VVAU_hls"]:
-			res_type = node_inst.get_nodeattr("resType")
-
-			if res_type != "lut":
-				node_inst.set_nodeattr("resType", "lut")
-				break
-		
-	return model
-
-def reduceLUTUsage(model, resources_per_layer):
-	sorted_resources_per_layer = sorted(resources_per_layer.items(), key = lambda x : x[1]['LUT'], reverse = True)
-	for layer in sorted_resources_per_layer:
-		name, _ = layer
-		node = model.get_node_from_name(name)
-		node_inst = registry.getCustomOp(node)
-		op_type = node.op_type
-		
-		if op_type in ["MVAU_hls", "VVAU_hls"]:
-			res_type = node_inst.get_nodeattr("resType")
-
-			if res_type != "dsp":
-				node_inst.set_nodeattr("resType", "dsp")
-				break
-		elif op_type == "ChannelwiseOp_hls":
-			ram_style = node_inst.get_nodeattr("ram_style")
-			tmem = node_inst.calc_tmem()
-
-			if ram_style == "distributed" and tmem > 1:
-				node_inst.set_nodeattr("ram_style", "block")
-				break
-		elif op_type.startswith("ConvolutionInputGenerator"):
-			ram_style = node_inst.get_nodeattr("ram_style")
-			
-			if ram_style == "distributed":
-				node_inst.set_nodeattr("ram_style", "ultra")
-				if node_inst.uram_efficiency_estimation() < 0.1:
-					node_inst.set_nodeattr("ram_style", "block")
-				break
-		elif op_type == "Thresholding_hls":
-			ram_style = node_inst.get_nodeattr("ram_style")
-			tmem = node_inst.calc_tmem()
-			if ram_style == "distributed" and tmem > 1:
-				node_inst.set_nodeattr("ram_style", "block")
-				break
-		
-	return model
-
-def reduceURAMUsage(model, resources_per_layer):
-	sorted_resources_per_layer = sorted(resources_per_layer.items(), key = lambda x : x[1]['URAM'], reverse = True)
-	for layer in sorted_resources_per_layer:
-		name, _ = layer
-
-		node = model.get_node_from_name(name)
-		node_inst = registry.getCustomOp(node)
-		op_type = node.op_type
-		
-		if op_type in ["MVAU_hls", "MVAU_rtl", "VVAU_hls", "VVAU_rtl"]:
-			mem_mode = node_inst.get_nodeattr("mem_mode")
-			if mem_mode == "internal_decoupled" and node_inst.get_nodeattr("ram_style") == "ultra":
-				if node_inst.bram_efficiency_estimation() >= 0.5:
-					node_inst.set_nodeattr("ram_style", "BRAM")
-				else:
+			elif op_type.startswith("ConvolutionInputGenerator"):
+				ram_style = node_inst.get_nodeattr("ram_style")
+				if ram_style != "distributed":
 					node_inst.set_nodeattr("ram_style", "distributed")
-				break
-		elif op_type == "Channelwise_op_hls":
-			ram_style = node_inst.get_nodeattr("ram_style")
-			tmem = node_inst.calc_tmem()
-			if ram_style == "block" and tmem > 1:
-				node_inst.set_nodeattr("ram_style", "distributed")
-				break
-		elif op_type.startswith("ConvolutionInputGenerator"):
-			ram_style = node_inst.get_nodeattr("ram_style")
-			if ram_style != "distributed":
-				node_inst.set_nodeattr("ram_style", "distributed")
-				break
+					break
 		
+		resources_per_layer = estimate_resources(model)
+		resources_total = aggregate_dict_keys(resources_per_layer)
+	
+	return model
+
+def reduceDSPUsage(model, resources_per_layer, available_resources, max_iters = 100):
+	sorted_resources_per_layer = sorted(resources_per_layer.items(), key = lambda x : x[1]['DSP'], reverse = True)
+	
+	resources_total = aggregate_dict_keys(resources_per_layer)
+
+	iters = 1
+	while iters < max_iters and resources_total['DSP'] > available_resources['DSP']:
+		iters += 1
+		for layer in sorted_resources_per_layer:
+			name, _ = layer
+			node = model.get_node_from_name(name)
+			node_inst = registry.getCustomOp(node)
+			op_type = node.op_type
+			
+			if op_type in ["MVAU_hls", "VVAU_hls"]:
+				res_type = node_inst.get_nodeattr("resType")
+
+				if res_type != "lut":
+					node_inst.set_nodeattr("resType", "lut")
+					break
+
+		resources_per_layer = estimate_resources(model)
+		resources_total = aggregate_dict_keys(resources_per_layer)
+			
+	return model
+
+def reduceLUTUsage(model, resources_per_layer, available_resources, max_iters = 100):
+	sorted_resources_per_layer = sorted(resources_per_layer.items(), key = lambda x : x[1]['LUT'], reverse = True)
+	
+	resources_total = aggregate_dict_keys(resources_per_layer)
+
+	iters = 1
+	while iters < max_iters and resources_total['LUT'] > available_resources['LUT']:
+		iters += 1
+		for layer in sorted_resources_per_layer:
+			name, _ = layer
+			node = model.get_node_from_name(name)
+			node_inst = registry.getCustomOp(node)
+			op_type = node.op_type
+			
+			if op_type in ["MVAU_hls", "VVAU_hls"]:
+				res_type = node_inst.get_nodeattr("resType")
+
+				if res_type != "dsp":
+					node_inst.set_nodeattr("resType", "dsp")
+					break
+			elif op_type == "ChannelwiseOp_hls":
+				ram_style = node_inst.get_nodeattr("ram_style")
+				tmem = node_inst.calc_tmem()
+
+				if ram_style == "distributed" and tmem > 1:
+					node_inst.set_nodeattr("ram_style", "block")
+					break
+			elif op_type.startswith("ConvolutionInputGenerator"):
+				ram_style = node_inst.get_nodeattr("ram_style")
+				
+				if ram_style == "distributed":
+					node_inst.set_nodeattr("ram_style", "ultra")
+					if node_inst.uram_efficiency_estimation() < 0.2:
+						node_inst.set_nodeattr("ram_style", "block")
+					break
+			elif op_type == "Thresholding_hls":
+				ram_style = node_inst.get_nodeattr("ram_style")
+				tmem = node_inst.calc_tmem()
+				if ram_style == "distributed" and tmem > 1:
+					node_inst.set_nodeattr("ram_style", "block")
+					break
+		
+		resources_per_layer = estimate_resources(model)
+		resources_total = aggregate_dict_keys(resources_per_layer)
+	
+			
+	return model
+
+def reduceURAMUsage(model, resources_per_layer, available_resources, max_iters = 100):
+	sorted_resources_per_layer = sorted(resources_per_layer.items(), key = lambda x : x[1]['URAM'], reverse = True)
+	
+	resources_total = aggregate_dict_keys(resources_per_layer)
+	
+	iters = 1
+	while iters < max_iters and resources_total['URAM'] > available_resources['URAM']:
+		iters += 1
+		for layer in sorted_resources_per_layer:
+			name, _ = layer
+
+			node = model.get_node_from_name(name)
+			node_inst = registry.getCustomOp(node)
+			op_type = node.op_type
+			
+			if op_type in ["MVAU_hls", "MVAU_rtl", "VVAU_hls", "VVAU_rtl"]:
+				mem_mode = node_inst.get_nodeattr("mem_mode")
+				if mem_mode == "internal_decoupled" and node_inst.get_nodeattr("ram_style") == "ultra":
+					if node_inst.bram_efficiency_estimation() >= 0.5:
+						node_inst.set_nodeattr("ram_style", "block")
+					else:
+						node_inst.set_nodeattr("ram_style", "distributed")
+					break
+			elif op_type == "Channelwise_op_hls":
+				ram_style = node_inst.get_nodeattr("ram_style")
+				tmem = node_inst.calc_tmem()
+				if ram_style == "block" and tmem > 1:
+					node_inst.set_nodeattr("ram_style", "distributed")
+					break
+			elif op_type.startswith("ConvolutionInputGenerator"):
+				ram_style = node_inst.get_nodeattr("ram_style")
+				if ram_style != "distributed":
+					node_inst.set_nodeattr("ram_style", "distributed")
+					break
+		
+		resources_per_layer = estimate_resources(model)
+		resources_total = aggregate_dict_keys(resources_per_layer)
+	
 	return model	
+
+def check_resources(available_resources, resources_total):
+	return np.all(np.array(list(resources_total.values())) <= np.array(list(available_resources.values()))) 
 
 def isFeasible(model, available_resources, max_iters = 100):
 	resources_per_layer = estimate_resources(model)
 	resources_total = aggregate_dict_keys(resources_per_layer)
 	
 	iters = 1
-	while iters < max_iters and np.any(np.array(list(resources_total.values())) > np.array(list(available_resources.values()))):		
+	while iters < max_iters and not check_resources(available_resources, resources_total):
 		iters += 1
 		if resources_total['BRAM_18K'] > available_resources['BRAM_18K']:
-			model = reduceBRAMUsage(model, resources_per_layer)
+			model = reduceBRAMUsage(model, resources_per_layer, available_resources)
 		
 		if resources_total['LUT'] > available_resources['LUT']:
-			model = reduceLUTUsage(model, resources_per_layer)
+			model = reduceLUTUsage(model, resources_per_layer, available_resources)
 		
 		if resources_total['URAM'] > available_resources['URAM']:
-			model = reduceURAMUsage(model, resources_per_layer)
+			model = reduceURAMUsage(model, resources_per_layer, available_resources)
 
 		if resources_total['DSP'] > available_resources['DSP']:
-			model = reduceDSPUsage(model, resources_per_layer)
+			model = reduceDSPUsage(model, resources_per_layer, available_resources)
 
 		resources_per_layer = estimate_resources(model)
 		resources_total = aggregate_dict_keys(resources_per_layer)
 
-	print(available_resources)
-	print(resources_total)
-	print("exiting")
+	feasible = check_resources(available_resources, resources_total)
+	return model, feasible
+
+def increase_folding(model, bottleneck_layer):
+	node = model.get_node_from_name(bottleneck_layer)
+	op_type = node.op_type
+	node_inst = registry.getCustomOp(node)
+
+	print(bottleneck_layer)
+
+	if op_type in ["MVAU_hls", "MVAU_rtl"]:
+		max_simd = node_inst.get_nodeattr("MW")
+		max_pe = node_inst.get_nodeattr("MH")
+
+		cur_simd = node_inst.get_nodeattr("SIMD")
+		print(cur_simd)
+		cur_pe = node_inst.get_nodeattr("PE")
+		print(cur_pe)
+
+		if cur_simd < max_simd:
+			for simd_val in range(cur_simd + 1, max_simd + 1):
+				if (max_simd % simd_val) == 0:
+					node_inst.set_nodeattr("SIMD", simd_val)
+					print(simd_val)
+					break
+		elif cur_pe < max_pe:
+			for pe_val in range(cur_pe + 1, max_pe + 1):
+				if (max_pe % pe_val) == 0:
+					node_inst.set_nodeattr("PE", pe_val)
+					print(pe_val)
+					break
+
+	return model
+
+def folding(model, available_resources):
+	set_defaults(model)
+
+	iters = 0
+	while isFeasible(model, available_resources):
+		iters += 1
+		cycles_per_layer = estimate_cycles(model)
+		sorted_cycles_per_layer = sorted(cycles_per_layer.items(), key = lambda x : x[1], reverse = True)
+		bottleneck_layer, latency = sorted_cycles_per_layer[0]
+		print("Latency: " + str(latency))
+		model = increase_folding(model, bottleneck_layer)
+	
+	

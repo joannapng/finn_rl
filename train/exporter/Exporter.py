@@ -76,6 +76,7 @@ from samo.model import network
 from train.exporter.utils import (
 	isFeasible,
 	set_defaults,
+	folding,
 	estimate_resources
 )
 
@@ -211,7 +212,7 @@ def set_folding(model, clk_period, board):
 	set_defaults(model)
 	f = open(platform_files[board], 'r')
 	available_resources = json.load(f)['resources']
-	isFeasible(model, available_resources)
+	folding(model, available_resources)
 
 	'''
 	depthwise_op_exceptions = ["VVAU_hls", "VVAU_rtl", "Pool_hls"]
