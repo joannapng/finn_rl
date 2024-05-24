@@ -8,6 +8,8 @@ from qonnx.transformation.general import (
     GiveUniqueNodeNames,
 )
 
+from copy import deepcopy
+
 def set_defaults(model):
 	model = model.transform(GiveUniqueNodeNames())
 	model = model.transform(GiveReadableTensorNames())
@@ -236,42 +238,140 @@ def increase_folding(model, bottleneck_layer):
 	op_type = node.op_type
 	node_inst = registry.getCustomOp(node)
 
-	print(bottleneck_layer)
+	increased = False
+
+	pe_ops = [
+            "AddStreams_hls",
+            "ChannelwiseOp_hls",
+            "DuplicateStreams_hls",
+            "GlobalAccPool_hls",
+            "Thresholding_hls",
+            "Thresholding_rtl",
+        ]
+	
+	simd_ops = [
+            "DownSampler_hls",
+            "FMPadding_hls",
+			"FMPadding_rtl",
+            "FMPadding_Pixel_hls",
+            "ConvolutionInputGenerator_hls",
+            "ConvolutionInputGenerator_rtl",
+        ]
 
 	if op_type in ["MVAU_hls", "MVAU_rtl"]:
 		max_simd = node_inst.get_nodeattr("MW")
 		max_pe = node_inst.get_nodeattr("MH")
 
 		cur_simd = node_inst.get_nodeattr("SIMD")
-		print(cur_simd)
 		cur_pe = node_inst.get_nodeattr("PE")
-		print(cur_pe)
 
 		if cur_simd < max_simd:
 			for simd_val in range(cur_simd + 1, max_simd + 1):
 				if (max_simd % simd_val) == 0:
 					node_inst.set_nodeattr("SIMD", simd_val)
-					print(simd_val)
+					increased = True
 					break
 		elif cur_pe < max_pe:
 			for pe_val in range(cur_pe + 1, max_pe + 1):
 				if (max_pe % pe_val) == 0:
 					node_inst.set_nodeattr("PE", pe_val)
-					print(pe_val)
+					increased = True
 					break
+	elif op_type in pe_ops:
+		max_pe = node_inst.get_nodeattr("NumChannels")
+		cur_pe = node_inst.get_nodeattr("PE")
+		if cur_pe < max_pe:
+			for pe_val in range(cur_pe + 1, max_pe + 1):
+				if (max_pe % pe_val) == 0:
+					node_inst.set_nodeattr("PE", pe_val)
+					increased = True
+					break
+	elif op_type == "LabelSelect_hls":
+		max_pe = node_inst.get_nodeattr("Labels")
+		cur_pe = node_inst.get_nodeattr("PE")
 
-	return model
+		if cur_pe < max_pe:
+			for pe_val in range(cur_pe + 1, max_pe + 1):
+				if (max_pe % pe_val) == 0:
+					node_inst.set_nodeattr("PE", pe_val)
+					increased = True
+					break
+	elif op_type == "depthwise_op_exceptions":
+		if op_type in ["VVAU_hls", "VVAU_rtl"]:
+			max_simd = np.prod(node_inst.get_nodeattr("Kernel"))
+			max_pe = node_inst.get_nodeattr("Channels")
+
+			cur_simd = node_inst.get_nodeattr("SIMD")
+			cur_pe = node_inst.get_nodeattr("PE")
+			
+			if cur_pe < max_pe:
+				for pe_val in range(cur_pe + 1, max_pe + 1):
+					if (max_pe % pe_val) == 0:
+						node_inst.set_nodeattr("PE", pe_val)
+						increased = True
+						break
+			elif cur_simd < max_simd:
+				for simd_val in range(cur_simd + 1, max_simd + 1):
+					if (max_simd % simd_val) == 0:
+						node_inst.set_nodeattr("SIMD", simd_val)
+						increased = True
+						break
+
+			swu_node = model.find_producer(node.input[0])
+			if swu_node.op_type.startswith("ConvolutionInputGenerator"):
+				swu_node_inst = registry.getCustomOp(swu_node)
+				swu_node_inst.set_nodeattr("SIMD", node_inst.get_nodeattr("PE"))
+
+				if swu_node.op_type == "ConvolutionInputGenerator_rtl":
+					if op_type.startswith("VVAU") and node_inst.get_nodeattr("SIMD") > 1:
+						swu_node_inst.set_nodeattr("parallel_window", 1)
+					else:
+						swu_node_inst.set_nodeattr("parallel_window", 0)
+	elif op_type in simd_ops:
+		if op_type.startswith("ConvolutionInputGenerator"):
+			depthwise = node_inst.get_nodeattr("depthwise")
+			if depthwise == 0:
+				max_simd = node_inst.get_nodeattr("IFMChannels")
+				if op_type == "ConvolutionInputGenerator_rtl":
+					node_inst.set_nodeattr("parallel_window", 0)
+				
+				cur_simd = node_inst.get_nodeattr("SIMD")
+				if cur_simd < max_simd:
+					for simd_val in range(cur_simd + 1, max_simd + 1):
+						if (max_simd % simd_val) == 0:
+							node_inst.set_nodeattr("SIMD", simd_val)
+							increased = True
+							break
+					if op_type == "ConvolutionInputGenerator_rtl" and node_inst.get_nodeattr("SIMD") == max_simd:
+						node_inst.set_nodeattr("parallel_window", 1)
+		else:
+			max_simd = node_inst.get_nodeattr("NumChannels")
+			cur_simd = node_inst.get_nodeattr("SIMD")
+			if cur_simd < max_simd:
+				for simd_val in range(cur_simd + 1, max_simd + 1):
+					if (max_simd % simd_val) == 0:
+						node_inst.set_nodeattr("SIMD", simd_val)
+						increased = True
+						break
+
+	return model, increased 
 
 def folding(model, available_resources):
 	set_defaults(model)
+	prev_model = deepcopy(model)
 
-	iters = 0
 	while isFeasible(model, available_resources):
-		iters += 1
 		cycles_per_layer = estimate_cycles(model)
 		sorted_cycles_per_layer = sorted(cycles_per_layer.items(), key = lambda x : x[1], reverse = True)
 		bottleneck_layer, latency = sorted_cycles_per_layer[0]
 		print("Latency: " + str(latency))
-		model = increase_folding(model, bottleneck_layer)
+		model, increased = increase_folding(model, bottleneck_layer)
+		if not increased:
+			break
+		prev_model = deepcopy(model)
 	
+	model = deepcopy(prev_model)
+	print(latency * 10.0)
+	print(1 / (latency * 10) * 10**9)
 	
+
