@@ -159,52 +159,6 @@ def specialize_layers(model, fpga_part):
 	
 	return model
 
-'''
-def target_fps_parallelization(model, clk_period, target_fps, mvau_wwidth_max =100000):
-	n_clock_cycles_per_sec = 10**9 / clk_period
-	n_cycles_per_frame = int(n_clock_cycles_per_sec / target_fps)
-	
-	model = model.transform(
-		SetFolding(
-			n_cycles_per_frame,
-			mvau_wwidth_max = mvau_wwidth_max,
-			two_pass_relaxation = True
-		)
-	)
-
-	for node in model.graph.node:
-		op_type = node.op_type
-		node = getCustomOp(node)
-		# TODO for vector activation
-		if op_type in ["MVAU_hls", "MVAU_rtl"]:
-			if bram_efficiency_estimation(node) < 0.25 and uram_efficiency_estimation(node) < 0.25:
-				node.set_nodeattr("mem_mode", "internal_embedded")
-			elif uram_efficiency_estimation(node) >= 0.25:
-				node.set_nodeattr("ram_style", "ultra")
-			else:
-				node.set_nodeattr("ram_style", "block")
-
-			if op_type == "MVAU_hls" and node.dsp_estimation() > 2000:
-				node.set_nodeattr("resType", "lut")
-
-	hw_attrs = [
-            "PE",
-            "SIMD",
-            "parallel_window",
-            "ram_style",
-            "resType",
-            "mem_mode",
-            "runtime_writeable_weights",
-            "depth_trigger_uram",
-            "depth_trigger_bram",
-        ]
-	
-
-	extract_model_config_to_json(model, "auto_folding_config.json", hw_attrs)
-	
-	return model
-'''
-
 def set_folding(model, clk_period, board):
 	model = model.transform(GiveUniqueNodeNames())
 	model = model.transform(GiveReadableTensorNames())
@@ -212,80 +166,13 @@ def set_folding(model, clk_period, board):
 	set_defaults(model)
 	f = open(platform_files[board], 'r')
 	available_resources = json.load(f)['resources']
-	folding(model, available_resources)
-
-	'''
-	depthwise_op_exceptions = ["VVAU_hls", "VVAU_rtl", "Pool_hls"]
 	
-	pe_ops = [
-            "AddStreams_hls",
-            "ChannelwiseOp_hls",
-            "DuplicateStreams_hls",
-            "GlobalAccPool_hls",
-            "Thresholding_hls",
-            "Thresholding_rtl",
-        ]
+	model, fps, avg_util, max_util, feasible = folding(model, available_resources, clk_period)
 
-	simd_ops = [
-		"DownSampler_hls",
-		"FMPadding_hls",
-		"FMPadding_rtl",
-		"FMPadding_Pixel_hls",
-		"ConvolutionInputGenerator_hls",
-		"ConvolutionInputGenerator_rtl",
-	]
-
-	# Unroll the network completely
-	for node in model.graph.node:
-		op_type = node.op_type
-		node_inst = getCustomOp(node)
-		if op_type in ["MVAU_hls", "MVAU_rtl"]:
-			max_simd = node_inst.get_nodeattr("MW")
-			max_pe =node_inst.get_nodeattr("MH")
-			node_inst.set_nodeattr("SIMD", max_simd)
-			node_inst.set_nodeattr("PE", max_pe)
-		elif op_type in pe_ops:
-			max_pe = node_inst.get_nodeattr("NumChannels")
-			node_inst.set_nodeattr("PE", max_pe)
-		elif op_type == "LabelSelect_hls":
-			max_pe = node_inst.get_nodeattr("Labels")
-			node_inst.set_nodeattr("PE", max_pe)
-		elif op_type in depthwise_op_exceptions:
-			max_pe = node_inst.get_nodeattr("Channels")
-			node_inst.set_nodeattr("PE", max_pe)
-
-			if op_type in ["VVAU_hls", "VVAU_rtl"]:
-				max_simd = np.prod(node_inst.get_nodeattr("Kernel"))
-				node_inst.set_nodeattr("SIMD", max_simd)
-
-			swu_node = model.find_producer(node.input[0])
-			if swu_node.op_type.startswith("ConvolutionInputGenerator"):
-				swu_node_inst = getCustomOp(swu_node)
-				swu_node_inst.set_nodeattr("SIMD", max_pe)
-				if swu_node.op_type == "ConvolutionInputGenerator_rtl":
-					if op_type.startswith("VVAU") and node_inst.get_nodeattr("SIMD") > 1:
-						swu_node_inst.set_nodeattr("parallel_window", 1)
-					else:
-						swu_node_inst.set_nodeattr("parallel_window", 0)
-		elif op_type in simd_ops:
-			if op_type.startswith("ConvolutionInputGenerator"):
-				depthwise = node_inst.get_nodeattr("depthwise")
-				if depthwise == 0:
-					max_simd = node_inst.get_nodeattr("IFMChannels")
-					if op_type == "ConvolutionInputGenerator_rtl":
-						node_inst.set_nodeattr("parallel_window", 0)
-					node_inst.set_nodeattr("SIMD", max_simd)
-			else:
-				max_simd = node_inst.get_nodeattr("NumChannels")
-				node_inst.set_nodeattr("SIMD", max_simd)
-		
-		if "inFIFODepths" in node_inst.get_nodeattr_types():
-			node_inst.set_nodeattr("inFIFODepths", [64])
-
-		if "outFIFODepths" in node_inst.get_nodeattr_types():
-			node_inst.set_nodeattr("outFIFODepths", [64])
-	
-	hw_attrs = [
+	if not feasible:
+		return model, 100 * max_util, fps, avg_util, max_util
+	else:
+		hw_attrs = [
 		"PE",
 		"SIMD",
 		"parallel_window",
@@ -297,90 +184,10 @@ def set_folding(model, clk_period, board):
 		"depth_trigger_bram",
 		"inFIFODepths",
 		"outFIFODepths"
-	]
+		]
 
-	extract_model_config_to_json(model, "max_folding.json", hw_attrs)
-
-	fc_layers = []
-	fc_layers = model.get_nodes_by_op_type("MVAU_rtl")
-	fc_layers += model.get_nodes_by_op_type("MVAU_hls")
-	
-	for layer in fc_layers:
-		layer = getCustomOp(layer)
-		print(bram_efficiency_estimation(layer))
-		print(uram_efficiency_estimation(layer))
-
-	platform_file = 'platforms/u250.json'
-	with open(platform_file, "r") as f:
-		platform = json.load(f)
-
-	graph = parser.parse(model, platform, 1000 / clk_period)
-	graph.enable_reconf = False
-	graph.objective = "latency"
-
-	for partition in graph.partitions:
-		partition.reset()
-
-	opt = SimulatedAnnealing(graph)
-
-	opt.start_time = time.time()
-	can_split = True
-
-	while can_split:
-		can_split = False
-		for i in range(len(opt.network.partitions)):
-			valid_splits = opt.network.valid_splits(i)
-			network_copy = deepcopy(opt.network)
-			if valid_splits:
-				can_split = True
-				prev = opt.network.check_constraints()
-				opt.network.split(i, valid_splits[0])
-				if prev and not opt.network.check_constraints():
-					can_split = False
-					opt.network = network_copy
-
-	# initial design infeasible
-	for node in model.graph.node:
-		op_type = node.op_type
-		node = getCustomOp(node)
-		# TODO for vector activation
-		if op_type in ["MVAU_hls", "MVAU_rtl"]:
-			if bram_efficiency_estimation(node) < 0.25 and uram_efficiency_estimation(node) < 0.25:
-				node.set_nodeattr("mem_mode", "internal_embedded")
-			elif uram_efficiency_estimation(node) >= 0.25:
-				node.set_nodeattr("ram_style", "ultra")
-			else:
-				node.set_nodeattr("ram_style", "block")
-
-			if op_type == "MVAU_hls" and node.dsp_estimation() > 2000:
-				node.set_nodeattr("resType", "lut")
-
-	if not opt.network.check_constraints():
-		return model, False
-	
-	opt.optimise()
-
-	if not opt.network.check_constraints():
-		return model, False
-	
-	opt.network.summary()
-	model = export(opt.network, model)
-
-	hw_attrs = [
-		"PE",
-		"SIMD",
-		"parallel_window",
-		"ram_style",
-		"resType",
-		"mem_mode",
-		"runtime_writeable_weights",
-		"depth_trigger_uram",
-		"depth_trigger_bram",
-	]
-	
-	extract_model_config_to_json(model, "auto_folding_config.json", hw_attrs)
-	'''
-	return model, True
+		extract_model_config_to_json(model, "auto_folding_config.json", hw_attrs)
+		return model, 0.0, fps, avg_util, max_util
 
 def apply_folding_config(model):
 	model = model.transform(GiveUniqueNodeNames())

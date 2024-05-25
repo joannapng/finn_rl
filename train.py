@@ -81,15 +81,19 @@ def main():
     args = parser.parse_args()
     args.fpga_part = part_map[args.board]
 
-    env = ModelEnv(args, get_model_config(args.model_name, args.custom_model_name, args.dataset))
+    env = Monitor(
+        ModelEnv(args, get_model_config(args.model_name, args.custom_model_name, args.dataset)),
+        filename = 'monitor.csv',
+        info_keywords=('acc', 'fps', 'avg_util')
+    )
     n_actions = env.action_space.shape[-1]
-    action_noise = NormalActionNoise(mean=np.zeros(n_actions), sigma=args.noise * np.ones(n_actions))
     
+    action_noise = NormalActionNoise(mean=np.zeros(n_actions), sigma=args.noise * np.ones(n_actions))
     agent = rl_algorithms[args.agent]("MlpPolicy", env, action_noise = action_noise, verbose = 1)
-    stop_train_callback = StopTrainingOnNoImprovementCallback(check_freq=500, patience = 3)
+    
+    #stop_train_callback = StopTrainingOnNoImprovementCallback(check_freq=500, patience = 3)
     agent.learn(total_timesteps=len(env.quantizable_idx) * args.num_episodes, 
-                log_interval=args.log_every,
-                callback=stop_train_callback)
+                log_interval=args.log_every)
     agent.save("agents/agent")
     
 if __name__ == "__main__":

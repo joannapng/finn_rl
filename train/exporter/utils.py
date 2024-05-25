@@ -48,7 +48,7 @@ def estimate_cycles(model):
 	
 	return cycle_dict
 
-def reduceBRAMUsage(model, resources_per_layer, available_resources, max_iters = 100):
+def reduceBRAMUsage(model, resources_per_layer, available_resources, max_iters = 10):
 	sorted_resources_per_layer = sorted(resources_per_layer.items(), key = lambda x : x[1]['BRAM_18K'], reverse = True)
 
 	resources_total = aggregate_dict_keys(resources_per_layer)
@@ -91,7 +91,7 @@ def reduceBRAMUsage(model, resources_per_layer, available_resources, max_iters =
 	
 	return model
 
-def reduceDSPUsage(model, resources_per_layer, available_resources, max_iters = 100):
+def reduceDSPUsage(model, resources_per_layer, available_resources, max_iters = 10):
 	sorted_resources_per_layer = sorted(resources_per_layer.items(), key = lambda x : x[1]['DSP'], reverse = True)
 	
 	resources_total = aggregate_dict_keys(resources_per_layer)
@@ -117,7 +117,7 @@ def reduceDSPUsage(model, resources_per_layer, available_resources, max_iters = 
 			
 	return model
 
-def reduceLUTUsage(model, resources_per_layer, available_resources, max_iters = 100):
+def reduceLUTUsage(model, resources_per_layer, available_resources, max_iters = 10):
 	sorted_resources_per_layer = sorted(resources_per_layer.items(), key = lambda x : x[1]['LUT'], reverse = True)
 	
 	resources_total = aggregate_dict_keys(resources_per_layer)
@@ -165,7 +165,7 @@ def reduceLUTUsage(model, resources_per_layer, available_resources, max_iters = 
 			
 	return model
 
-def reduceURAMUsage(model, resources_per_layer, available_resources, max_iters = 100):
+def reduceURAMUsage(model, resources_per_layer, available_resources, max_iters = 10):
 	sorted_resources_per_layer = sorted(resources_per_layer.items(), key = lambda x : x[1]['URAM'], reverse = True)
 	
 	resources_total = aggregate_dict_keys(resources_per_layer)
@@ -208,7 +208,7 @@ def reduceURAMUsage(model, resources_per_layer, available_resources, max_iters =
 def check_resources(available_resources, resources_total):
 	return np.all(np.array(list(resources_total.values())) <= np.array(list(available_resources.values()))) 
 
-def isFeasible(model, available_resources, max_iters = 100):
+def isFeasible(model, available_resources, max_iters = 10):
 	resources_per_layer = estimate_resources(model)
 	resources_total = aggregate_dict_keys(resources_per_layer)
 	
@@ -356,22 +356,46 @@ def increase_folding(model, bottleneck_layer):
 
 	return model, increased 
 
-def folding(model, available_resources):
+def avg_utilization(model, available_resources):
+	resources_per_layer = estimate_resources(model)
+	resources_total = aggregate_dict_keys(resources_per_layer)
+
+	avg_util = 0
+	max_util = 0
+	for resource in resources_total.keys():
+		util = (resources_total[resource]) / available_resources[resource]
+		avg_util += 1 / len(resources_total.keys()) * util
+
+		if util > max_util:
+			max_util = util
+	
+	return avg_util, max_util
+
+def folding(model, available_resources, clk_period):
 	set_defaults(model)
 	prev_model = deepcopy(model)
 
-	while isFeasible(model, available_resources):
+	model, feasible = isFeasible(model, available_resources)
+
+	if not feasible:
+		avg_util, max_util = avg_utilization(model, available_resources)
+		return model, 0.0, avg_util, max_util, False
+
+	while feasible:
 		cycles_per_layer = estimate_cycles(model)
 		sorted_cycles_per_layer = sorted(cycles_per_layer.items(), key = lambda x : x[1], reverse = True)
 		bottleneck_layer, latency = sorted_cycles_per_layer[0]
-		print("Latency: " + str(latency))
+	
 		model, increased = increase_folding(model, bottleneck_layer)
 		if not increased:
 			break
+
 		prev_model = deepcopy(model)
+		model, feasible = isFeasible(model, available_resources)
 	
 	model = deepcopy(prev_model)
-	print(latency * 10.0)
-	print(1 / (latency * 10) * 10**9)
-	
-
+	cycles_per_layer = estimate_cycles(model)
+	max_cycles = max(cycles_per_layer.items(), key = lambda x : x[1])[1]
+	fps = 1 / (max_cycles * clk_period) * 10**9
+	avg_util, _ = avg_utilization(model, available_resources)
+	return model, fps, avg_util, None, True

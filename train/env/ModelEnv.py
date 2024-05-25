@@ -218,16 +218,12 @@ class ModelEnv(gym.Env):
         self.strategy.append(self.last_action)
 
         if self.is_final_layer():
-            # check if model is feasible
-            # TODO: return how much the model exceeds resources (maybe)
             print(self.strategy)
-            penalty = self.final_action_wall()
+            penalty, fps, avg_util, max_util = self.final_action_wall()
 
-            if penalty == -10.0:
-                reward = penalty
-            else:
+            if penalty == 0.0:
                 # quantize model
-                self.model, _ = self.quantizer.quantize_model(  self.model,
+                self.model, _ = self.quantizer.quantize_model(self.model,
                                                 self.strategy,
                                                 self.quantizable_idx,
                                                 self.num_quant_acts)
@@ -245,29 +241,32 @@ class ModelEnv(gym.Env):
 
                 # validate model
                 acc = self.finetuner.validate()
-                reward = self.reward(acc, penalty)
+                reward = self.reward(acc)
 
-            print(reward)
+            else:
+                reward = -penalty
+                acc = 0.0
+
             if reward > self.best_reward:
                 self.best_reward = reward
             
             obs = self.layer_embedding[self.cur_ind, :].copy()
             done = True
-            info = {}
-            return obs, reward, True, False, info 
+            info = {'acc' : acc, 'fps' : fps, 'avg_util' : avg_util}
+            return obs, reward, done, False, info 
         
         reward = 0 
-        done = False
 
         self.cur_ind += 1
         self.index_to_quantize = self.quantizable_idx[self.cur_ind]
         self.layer_embedding[self.cur_ind][-1] = float(self.last_action)
+        done = False
         obs = self.layer_embedding[self.cur_ind, :].copy()
-        info = {}
-        return obs, reward, False, False, info
+        info = {'acc' : 0.0, 'fps' : 0.0, 'avg_util' : 0.0}
+        return obs, reward, done, False, info
 
-    def reward(self, acc, penalty):
-        return (acc - self.orig_acc + penalty) * 0.1
+    def reward(self, acc):
+        return (acc - self.orig_acc) * 0.1
         
     def get_action(self, action):
         action = float(action[0])
@@ -303,14 +302,9 @@ class ModelEnv(gym.Env):
         model = qonnx_to_finn(model)
         model = streamline_resnet(model)
         model = convert_to_hw_resnet(model)
-        model.save('streamlined_model.onnx')
+     #   model.save('streamlined_model.onnx')
         model = create_dataflow_partition(model)
         model = specialize_layers(model, self.args.fpga_part)
-        model, feasible_model = set_folding(model, self.args.synth_clk_period_ns, self.args.board)
+        model, penalty, fps, avg_util, max_util = set_folding(model, self.args.synth_clk_period_ns, self.args.board)
         
-        if not feasible_model:
-            penalty = -10.0
-        
-        model = apply_folding_config(model)
-        
-        return penalty
+        return penalty, fps, avg_util, max_util
