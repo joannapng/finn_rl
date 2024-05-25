@@ -27,7 +27,7 @@ parser.add_argument('--validation-split', default = 0.2, type = float, help = 'T
 # Trainer Parameters
 parser.add_argument('--training-epochs', default = 10, type = int, help = 'Training epochs')
 parser.add_argument('--save-dir', default = './checkpoints', help = 'Directory to save model and logs')
-parser.add_argument('--print_every', default = 100, help = 'How frequent to print progress')
+parser.add_argument('--print_every', type = int, default = 100, help = 'How frequent to print progress')
 parser.add_argument('--checkpoint_every', default = 10, help = 'How many epochs to keep a checkpoint')
 
 # Optimizer Parameters

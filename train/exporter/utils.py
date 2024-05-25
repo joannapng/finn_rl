@@ -385,7 +385,7 @@ def folding(model, available_resources, clk_period):
 		cycles_per_layer = estimate_cycles(model)
 		sorted_cycles_per_layer = sorted(cycles_per_layer.items(), key = lambda x : x[1], reverse = True)
 		bottleneck_layer, latency = sorted_cycles_per_layer[0]
-	
+		print(f'latency = {latency}')
 		model, increased = increase_folding(model, bottleneck_layer)
 		if not increased:
 			break

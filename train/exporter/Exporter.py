@@ -285,16 +285,12 @@ def convert_to_hw_resnet(model):
 	model = model.transform(absorb.AbsorbTransposeIntoMultiThreshold())
 	model = model.transform(absorb.AbsorbConsecutiveTransposes())
 
-	model = model.transform(reorder.MoveTransposePastJoinAdd())
-	model = model.transform(absorb.AbsorbTransposeIntoMultiThreshold())
-	model = model.transform(reorder.MoveTransposePastFork())
-	model = model.transform(absorb.AbsorbConsecutiveTransposes())
-
-	model = model.transform(reorder.MoveTransposePastJoinAdd())
-	model = model.transform(absorb.AbsorbTransposeIntoMultiThreshold())
-	model = model.transform(reorder.MoveTransposePastFork())
-	model = model.transform(absorb.AbsorbConsecutiveTransposes())
-
+	for i in range(6):
+		model = model.transform(reorder.MoveTransposePastJoinAdd())
+		model = model.transform(absorb.AbsorbTransposeIntoMultiThreshold())
+		model = model.transform(reorder.MoveTransposePastFork())
+		model = model.transform(absorb.AbsorbConsecutiveTransposes())
+		
 	model = model.transform(InferDataLayouts())
 	model = model.transform(RoundAndClipThresholds())
 	model = model.transform(convert.InferThresholdingLayer())

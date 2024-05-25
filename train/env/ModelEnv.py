@@ -113,9 +113,6 @@ class ModelEnv(gym.Env):
         )
     
         self.orig_acc = self.finetuner.orig_acc
-        
-        # get platform simulator
-        self.simulator = None
 
     def build_state_embedding(self):
         self.model = preprocess_for_quantize(self.model)
@@ -221,31 +218,61 @@ class ModelEnv(gym.Env):
             print(self.strategy)
             penalty, fps, avg_util, max_util = self.final_action_wall()
 
-            if penalty == 0.0:
-                # quantize model
-                self.model, _ = self.quantizer.quantize_model(self.model,
-                                                self.strategy,
-                                                self.quantizable_idx,
-                                                self.num_quant_acts)
+            if self.args.target == 'accuracy':
+                if fps < self.args.min_fps:
+                        reward = - (self.args.min_fps - fps)
+                        acc = 0.0
+                elif penalty == 0.0:
+                    # quantize model
+                    self.model, _ = self.quantizer.quantize_model(self.model,
+                                                    self.strategy,
+                                                    self.quantizable_idx,
+                                                    self.num_quant_acts)
 
 
-                # calibrate model 
-                self.finetuner.model = self.model 
-                self.finetuner.model.to(self.finetuner.device)
-                self.finetuner.calibrate()
+                    # calibrate model 
+                    self.finetuner.model = self.model 
+                    self.finetuner.model.to(self.finetuner.device)
+                    self.finetuner.calibrate()
 
-                # finetuner model
-                self.finetuner.init_finetuning_optim()
-                self.finetuner.init_loss()
-                self.finetuner.finetune()
+                    # finetuner model
+                    self.finetuner.init_finetuning_optim()
+                    self.finetuner.init_loss()
+                    self.finetuner.finetune()
 
-                # validate model
-                acc = self.finetuner.validate()
-                reward = self.reward(acc)
-
+                    # validate model
+                    acc = self.finetuner.validate()
+                    reward = self.reward(acc, fps, target = self.args.target)
+                else:
+                    reward = -penalty # resource penalty
+                    acc = 0.0
             else:
-                reward = -penalty
-                acc = 0.0
+                if penalty == 0.0:
+                    self.model, _ = self.quantizer.quantize_model(self.model,
+                                                    self.strategy,
+                                                    self.quantizable_idx,
+                                                    self.num_quant_acts)
+
+
+                    # calibrate model 
+                    self.finetuner.model = self.model 
+                    self.finetuner.model.to(self.finetuner.device)
+                    self.finetuner.calibrate()
+
+                    # finetuner model
+                    self.finetuner.init_finetuning_optim()
+                    self.finetuner.init_loss()
+                    self.finetuner.finetune()
+
+                    # validate model
+                    acc = self.finetuner.validate()
+                    if acc < self.args.min_acc:
+                        reward = (acc - self.args.min_acc) * 10000.0
+                    else:
+                        reward = self.reward(acc, fps, target = self.args.target)
+                else:
+                    reward = -penalty # resource penalty
+                    acc = 0.0
 
             if reward > self.best_reward:
                 self.best_reward = reward
@@ -259,14 +286,17 @@ class ModelEnv(gym.Env):
 
         self.cur_ind += 1
         self.index_to_quantize = self.quantizable_idx[self.cur_ind]
-        self.layer_embedding[self.cur_ind][-1] = float(self.last_action)
+        self.layer_embedding[self.cur_ind][-1] = (float(self.last_action) - float(self.min_bit)) / (float(self.max_bit) - float(self.min_bit))
         done = False
         obs = self.layer_embedding[self.cur_ind, :].copy()
         info = {'acc' : 0.0, 'fps' : 0.0, 'avg_util' : 0.0}
         return obs, reward, done, False, info
 
-    def reward(self, acc):
-        return (acc - self.orig_acc) * 0.1
+    def reward(self, acc, fps, target = 'accuracy'):
+        if target == 'accuracy':
+            return (acc - self.orig_acc) * 0.1
+        else:
+            return fps - self.args.min_fps
         
     def get_action(self, action):
         action = float(action[0])
@@ -302,9 +332,12 @@ class ModelEnv(gym.Env):
         model = qonnx_to_finn(model)
         model = streamline_resnet(model)
         model = convert_to_hw_resnet(model)
-     #   model.save('streamlined_model.onnx')
         model = create_dataflow_partition(model)
         model = specialize_layers(model, self.args.fpga_part)
         model, penalty, fps, avg_util, max_util = set_folding(model, self.args.synth_clk_period_ns, self.args.board)
-        
+        print(penalty)
+        print(fps)
+        print(avg_util)
+        print(max_util)
+
         return penalty, fps, avg_util, max_util
