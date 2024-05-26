@@ -159,7 +159,7 @@ def specialize_layers(model, fpga_part):
 	
 	return model
 
-def set_folding(model, clk_period, board):
+def set_folding(model, board):
 	model = model.transform(GiveUniqueNodeNames())
 	model = model.transform(GiveReadableTensorNames())
 
@@ -167,10 +167,10 @@ def set_folding(model, clk_period, board):
 	f = open(platform_files[board], 'r')
 	available_resources = json.load(f)['resources']
 	
-	model, fps, avg_util, max_util, feasible = folding(model, available_resources, clk_period)
+	model, max_cycles, avg_util, max_util, feasible = folding(model, available_resources)
 
 	if not feasible:
-		return model, 100 * max_util, fps, avg_util, max_util
+		return model, max_cycles, avg_util, max_util
 	else:
 		hw_attrs = [
 		"PE",
@@ -187,7 +187,7 @@ def set_folding(model, clk_period, board):
 		]
 
 		extract_model_config_to_json(model, "auto_folding_config.json", hw_attrs)
-		return model, 0.0, fps, avg_util, max_util
+		return model, max_cycles, avg_util, max_util
 
 def apply_folding_config(model):
 	model = model.transform(GiveUniqueNodeNames())

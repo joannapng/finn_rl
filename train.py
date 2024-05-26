@@ -73,13 +73,15 @@ parser.add_argument('--num-episodes', default = 100, type = int, help = 'Number 
 parser.add_argument('--log-every', default = 10, type = int, help = 'How many episodes to wait to log agent')
 
 ### --- DESIGN --- ###
-parser.add_argument('--synth-clk-period-ns', type = float, default = 5.0, help = 'Target clock period in ns')
 parser.add_argument('--board', default = "U250", help = "Name of target board")
 parser.add_argument('--shell-flow-type', default = "vitis_alveo", choices = ["vivado_zynq", "vitis_alveo"], help = "Target shell type")
+parser.add_argument('--freq', type = float, default = 200.0, help = 'Frequency in MHz')
+parser.add_argument('--max-freq', type = float, default = 300.0, help = 'Maximum device frequency in MHz')
 
-parser.add_argument('--target', default = 'accuracy', choices = ['accuracy', 'latency'], help = 'Objective to optimize model for')
-parser.add_argument('--min-accuracy', default = '60.0', type = float, help = 'Minimum accuracy when target is latency')
-parser.add_argument('--min-fps', default = 3000, type = float, help = 'Minimum fps when target is accuracy')
+parser.add_argument('--target', default = 'latency', choices = ['accuracy', 'latency'], help = 'Objective to optimize model for')
+parser.add_argument('--target-acc', default = 65.0, type = float, help = 'Minimum accuracy when target is latency')
+parser.add_argument('--target-fps', default = 2000, type = float, help = 'Target fps when target is accuracy')
+
 
 def main():
     args = parser.parse_args()

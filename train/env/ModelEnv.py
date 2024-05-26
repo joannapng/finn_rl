@@ -39,6 +39,7 @@ from stable_baselines3.common.env_checker import check_env
 
 import brevitas.onnx as bo
 from qonnx.core.modelwrapper import ModelWrapper
+from copy import deepcopy
 
 platform_path = './platforms'
 platform_files = {}
@@ -113,6 +114,8 @@ class ModelEnv(gym.Env):
         )
     
         self.orig_acc = self.finetuner.orig_acc
+        self.max_fps = 0.0
+        self.max_acc = 0.0
 
     def build_state_embedding(self):
         self.model = preprocess_for_quantize(self.model)
@@ -121,6 +124,7 @@ class ModelEnv(gym.Env):
                     self.model_config['center_crop_shape'], self.finetuner.in_channels)
     
         self.quantizable_idx = []
+        self.bound_list = []
         self.num_quant_acts = 0
         layer_embedding = []
 
@@ -131,6 +135,7 @@ class ModelEnv(gym.Env):
                 module = get_module(self.model, node.target)
                 if type(module) in self.quantizable_acts:
                     self.quantizable_idx.append(i)
+                    self.bound_list.append(self.min_bit)
                     this_state.append([i])
                     this_state.append([1])
                     
@@ -156,6 +161,7 @@ class ModelEnv(gym.Env):
                 module = get_module(self.model, node.target)
                 if type(module) in self.quantizable_layers:
                     self.quantizable_idx.append(i)
+                    self.bound_list.append(self.min_bit)
                     this_state.append([i])
                     this_state.append([0])
 
@@ -216,21 +222,38 @@ class ModelEnv(gym.Env):
 
         if self.is_final_layer():
             print(self.strategy)
-            penalty, fps, avg_util, max_util = self.final_action_wall()
+            
+            if self.args.target == 'latency':
+                fps, avg_util, max_util, penalty = self.final_action_wall()
+                self.model, self.strategy, self.bound_list = self.quantizer.quantize_model(self.model,
+                                                self.strategy,
+                                                self.quantizable_idx,
+                                                self.num_quant_acts,
+                                                self.bound_list)
+                # calibrate model 
+                self.finetuner.model = self.model 
+                self.finetuner.model.to(self.finetuner.device)
+                self.finetuner.calibrate()
 
-            if self.args.target == 'accuracy':
-                if fps < self.args.min_fps:
-                        reward = - (self.args.min_fps - fps)
-                        acc = 0.0
-                elif penalty == 0.0:
-                    # quantize model
-                    self.model, _ = self.quantizer.quantize_model(self.model,
+                # finetuner model
+                self.finetuner.init_finetuning_optim()
+                self.finetuner.init_loss()
+                self.finetuner.finetune()
+
+                # validate model
+                acc = self.finetuner.validate()
+                
+            elif self.args.target == 'accuracy':
+                penalty = 0.0
+                while True:
+                    fps, avg_util, max_util, penalty = self.final_action_wall()
+                    self.prev_model = deepcopy(self.model)
+                    self.model, self.strategy, self.bound_list = self.quantizer.quantize_model(self.model,
                                                     self.strategy,
                                                     self.quantizable_idx,
-                                                    self.num_quant_acts)
-
-
-                    # calibrate model 
+                                                    self.num_quant_acts,
+                                                    self.bound_list)
+                    
                     self.finetuner.model = self.model 
                     self.finetuner.model.to(self.finetuner.device)
                     self.finetuner.calibrate()
@@ -242,37 +265,26 @@ class ModelEnv(gym.Env):
 
                     # validate model
                     acc = self.finetuner.validate()
-                    reward = self.reward(acc, fps, target = self.args.target)
-                else:
-                    reward = -penalty # resource penalty
-                    acc = 0.0
-            else:
-                if penalty == 0.0:
-                    self.model, _ = self.quantizer.quantize_model(self.model,
-                                                    self.strategy,
-                                                    self.quantizable_idx,
-                                                    self.num_quant_acts)
 
+                    if acc > self.max_acc:
+                        self.max_acc = acc
 
-                    # calibrate model 
-                    self.finetuner.model = self.model 
-                    self.finetuner.model.to(self.finetuner.device)
-                    self.finetuner.calibrate()
+                    if acc >= self.args.target_acc:
+                        break
 
-                    # finetuner model
-                    self.finetuner.init_finetuning_optim()
-                    self.finetuner.init_loss()
-                    self.finetuner.finetune()
-
-                    # validate model
-                    acc = self.finetuner.validate()
-                    if acc < self.args.min_acc:
-                        reward = (acc - self.args.min_acc) * 10000.0
+                    idx, bit = min(enumerate(self.strategy), key = lambda x : x[1])
+                    if bit < self.max_bit:
+                        self.strategy[idx] += 1
+                        print(self.strategy)
+                        penalty -= acc
+                        self.model = deepcopy(self.prev_model)
                     else:
-                        reward = self.reward(acc, fps, target = self.args.target)
-                else:
-                    reward = -penalty # resource penalty
-                    acc = 0.0
+                        # all bits are quantized
+                        self.args.target_acc = self.max_acc
+                        print(f'Failed to achieve target accuracy, new target accuracy is set to {self.max_acc} %')
+                        break
+
+            reward = self.reward(acc, fps, penalty, target = self.args.target)
 
             if reward > self.best_reward:
                 self.best_reward = reward
@@ -286,17 +298,20 @@ class ModelEnv(gym.Env):
 
         self.cur_ind += 1
         self.index_to_quantize = self.quantizable_idx[self.cur_ind]
-        self.layer_embedding[self.cur_ind][-1] = (float(self.last_action) - float(self.min_bit)) / (float(self.max_bit) - float(self.min_bit))
+        
+        if self.max_bit > self.min_bit:
+            self.layer_embedding[self.cur_ind][-1] = (float(self.last_action) - float(self.min_bit)) / (float(self.max_bit) - float(self.min_bit))
+        
         done = False
         obs = self.layer_embedding[self.cur_ind, :].copy()
         info = {'acc' : 0.0, 'fps' : 0.0, 'avg_util' : 0.0}
         return obs, reward, done, False, info
 
-    def reward(self, acc, fps, target = 'accuracy'):
-        if target == 'accuracy':
-            return (acc - self.orig_acc) * 0.1
+    def reward(self, acc, fps, penalty, target = 'latency'):
+        if target == 'latency':
+            return (acc - self.orig_acc) * 0.1 + penalty
         else:
-            return fps - self.args.min_fps
+            return fps + penalty
         
     def get_action(self, action):
         action = float(action[0])
@@ -309,35 +324,58 @@ class ModelEnv(gym.Env):
         return self.cur_ind == len(self.quantizable_idx) - 1
     
     def final_action_wall(self):
-        penalty = 0.0
-        # quantize model with the original strategy
-        model_for_measure = copy.deepcopy(self.model)
-        model_for_measure, self.strategy = self.quantizer.quantize_model(model_for_measure,
-                                                          self.strategy,
-                                                          self.quantizable_idx,
-                                                          self.num_quant_acts)
+        while True:
+            model_for_measure = copy.deepcopy(self.model)
+            model_for_measure, self.strategy, self.bound_list = self.quantizer.quantize_model(model_for_measure,
+                                                            self.strategy,
+                                                            self.quantizable_idx,
+                                                            self.num_quant_acts,
+                                                            self.bound_list)
+            # export model to qonnx
+            img_shape = self.model_config['center_crop_shape']
+            device, dtype = next(model_for_measure.parameters()).device, next(model_for_measure.parameters()).dtype
+            ref_input = torch.randn(1, 3, img_shape, img_shape, device = device, dtype = dtype)
+            bo.export_qonnx(model_for_measure, ref_input, export_path = 'model.onnx', keep_initializers_as_inputs = False, opset_version = 11, verbose = False)
+        
+            # Transformations
+            model = ModelWrapper('model.onnx')
+            model = preprocessing(model)
+            model = postprocessing(model)
+            model = make_input_channels_last(model)
+            model = tidy_up(model)
+            model = qonnx_to_finn(model)
+            model = streamline_resnet(model)
+            model = convert_to_hw_resnet(model)
+            model = create_dataflow_partition(model)
+            model = specialize_layers(model, self.args.fpga_part)
+            model, cycles, avg_util, max_util = set_folding(model, self.args.board)
 
-        # export model to qonnx
-        img_shape = self.model_config['center_crop_shape']
-        device, dtype = next(model_for_measure.parameters()).device, next(model_for_measure.parameters()).dtype
-        ref_input = torch.randn(1, 3, img_shape, img_shape, device = device, dtype = dtype)
-        bo.export_qonnx(model_for_measure, ref_input, export_path = 'model.onnx', keep_initializers_as_inputs = False, opset_version = 11, verbose = False)
-    
-        # Transformations
-        model = ModelWrapper('model.onnx')
-        model = preprocessing(model)
-        model = postprocessing(model)
-        model = make_input_channels_last(model)
-        model = tidy_up(model)
-        model = qonnx_to_finn(model)
-        model = streamline_resnet(model)
-        model = convert_to_hw_resnet(model)
-        model = create_dataflow_partition(model)
-        model = specialize_layers(model, self.args.fpga_part)
-        model, penalty, fps, avg_util, max_util = set_folding(model, self.args.synth_clk_period_ns, self.args.board)
-        print(penalty)
-        print(fps)
-        print(avg_util)
-        print(max_util)
+            penalty = 0.0
 
-        return penalty, fps, avg_util, max_util
+            fps = self.args.freq * 10**6 / cycles
+            if fps > self.max_fps:
+                self.max_fps = fps
+
+            if self.args.target == 'latency':
+                if fps >= self.args.target_fps:
+                    break
+                else:
+                    freq = cycles * self.args.target_fps / 10**6
+
+                    if freq <= self.args.max_freq:
+                        print(f'Managed to achieve {self.args.target_fps} fps using freq = {freq} MHz. Consider changing target frequency')
+                    
+                    print(f'Target fps not achieved (achieved fps: {fps})')
+                    penalty -= fps
+                    # reduce bitwidth in the hopes that maximum fps is achieved
+                    idx, bit = max(enumerate(self.strategy), key = lambda x : x[1])
+                    if bit > self.bound_list[idx]:
+                        self.strategy[idx] -= 1
+                    else:
+                        # all bits are quantized
+                        self.args.target_fps = self.max_fps
+                        print(f'Failed to achieve target fps, new target fps is set to {self.max_fps} fps')
+                        break
+            else:
+                break
+        return fps, avg_util, max_util, penalty

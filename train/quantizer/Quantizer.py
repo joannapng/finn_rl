@@ -189,7 +189,7 @@ class Quantizer(object):
 
         return quant_layer_map, quant_act_map, quant_identity_map
     
-    def quantize_model(self, model, strategy, quantizable_idx, num_quant_acts):
+    def quantize_model(self, model, strategy, quantizable_idx, num_quant_acts, bound_list):
         ignore_missing_keys_state = config.IGNORE_MISSING_KEYS
         config.IGNORE_MISSING_KEYS = True
         training_state = model.training
@@ -203,7 +203,8 @@ class Quantizer(object):
         for i in range(num_quant_acts):
             model, modified_bit_width = self.quantize_act(model, quantizable_idx[i], int(strategy[i]))
             if modified_bit_width:
-                strategy[i] += 1
+                strategy[i] = 2
+                bound_list[i] = 2
 
         # quantize add outputs and handle residuals
         self.quantize_output(model)
@@ -219,7 +220,7 @@ class Quantizer(object):
         model.train(training_state)
         config.IGNORE_MISSING_KEYS = ignore_missing_keys_state
 
-        return model, strategy
+        return model, strategy, bound_list
 
     def update_index(self, model, quantizable_idx):
         idx = 0

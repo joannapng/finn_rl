@@ -371,7 +371,7 @@ def avg_utilization(model, available_resources):
 	
 	return avg_util, max_util
 
-def folding(model, available_resources, clk_period):
+def folding(model, available_resources):
 	set_defaults(model)
 	prev_model = deepcopy(model)
 
@@ -385,7 +385,6 @@ def folding(model, available_resources, clk_period):
 		cycles_per_layer = estimate_cycles(model)
 		sorted_cycles_per_layer = sorted(cycles_per_layer.items(), key = lambda x : x[1], reverse = True)
 		bottleneck_layer, latency = sorted_cycles_per_layer[0]
-		print(f'latency = {latency}')
 		model, increased = increase_folding(model, bottleneck_layer)
 		if not increased:
 			break
@@ -396,6 +395,5 @@ def folding(model, available_resources, clk_period):
 	model = deepcopy(prev_model)
 	cycles_per_layer = estimate_cycles(model)
 	max_cycles = max(cycles_per_layer.items(), key = lambda x : x[1])[1]
-	fps = 1 / (max_cycles * clk_period) * 10**9
 	avg_util, _ = avg_utilization(model, available_resources)
-	return model, fps, avg_util, None, True
+	return model, max_cycles, avg_util, None, True
