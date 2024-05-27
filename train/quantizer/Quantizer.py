@@ -274,6 +274,7 @@ class Quantizer(object):
                             if isinstance(m, nn.Conv2d) or isinstance(m, qnn.QuantConv2d):
                                 if act_bit_width == 1:
                                     act_bit_width += 1
+                                    print("increased activation bit width")
                                     modified_bit_width = True
                     
                     quant_module_class, quant_module_kwargs = layer_map[type(module)]

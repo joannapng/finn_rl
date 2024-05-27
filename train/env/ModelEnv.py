@@ -62,7 +62,7 @@ class ModelEnv(gym.Env):
     def __init__(self, args, model_config):
         self.args = args
 
-        self.observation_space = spaces.Box(low = 0.0, high = 1.0, shape=(6, ), dtype = np.float32)
+        self.observation_space = spaces.Box(low = 0.0, high = 1.0, shape=(5, ), dtype = np.float32)
         self.action_space = spaces.Box(low = -1.0, high = 1.0, shape = (1, ), dtype = np.float32)
 
         self.quantizable_acts = [
@@ -148,7 +148,6 @@ class ModelEnv(gym.Env):
 
                     this_state.append([module.flops])
                     this_state.append([module.params])
-                    this_state.append([1.]) # last action
                     layer_embedding.append(np.hstack(this_state))
         
         # number of activation layers
@@ -180,7 +179,6 @@ class ModelEnv(gym.Env):
 
                     this_state.append([module.flops])
                     this_state.append([module.params])
-                    this_state.append([1.]) # last action
                     layer_embedding.append(np.hstack(this_state))
 
         layer_embedding = np.array(layer_embedding, dtype=np.float32)
@@ -191,7 +189,7 @@ class ModelEnv(gym.Env):
 
             if fmax - fmin > 0:
                 layer_embedding[:, i] = (layer_embedding[:, i] - fmin) / (fmax - fmin)
-        
+
         self.layer_embedding = layer_embedding
 
     def reset(self, seed = None, option = None):
@@ -215,6 +213,7 @@ class ModelEnv(gym.Env):
         info = {"info": 0}
         return obs, info
 
+    '''
     def step(self, action):
         action = self.get_action(action)
         self.last_action = action
@@ -307,7 +306,103 @@ class ModelEnv(gym.Env):
         info = {'acc' : 0.0, 'fps' : 0.0, 'avg_util' : 0.0}
         return obs, reward, done, False, info
 
+    '''
+
+    def step(self, action):
+        action = self.get_action(action)
+        self.last_action = action
+        self.strategy.append(self.last_action)
+
+        if self.is_final_layer():
+            print(self.strategy)
+            
+            if self.args.target == 'latency':
+                fps, avg_util, max_util, penalty = self.final_action_wall()
+                self.model, self.strategy, self.bound_list = self.quantizer.quantize_model(self.model,
+                                                self.strategy,
+                                                self.quantizable_idx,
+                                                self.num_quant_acts,
+                                                self.bound_list)
+                # calibrate model 
+                self.finetuner.model = self.model 
+                self.finetuner.model.to(self.finetuner.device)
+                self.finetuner.calibrate()
+
+                # finetuner model
+                self.finetuner.init_finetuning_optim()
+                self.finetuner.init_loss()
+                self.finetuner.finetune()
+
+                # validate model
+                acc = self.finetuner.validate()
+                
+            elif self.args.target == 'accuracy':
+                penalty = 0.0
+                
+                fps, avg_util, max_util, penalty = self.final_action_wall()
+                self.prev_model = deepcopy(self.model)
+                self.model, self.strategy, self.bound_list = self.quantizer.quantize_model(self.model,
+                                                self.strategy,
+                                                self.quantizable_idx,
+                                                self.num_quant_acts,
+                                                self.bound_list)
+                
+                self.finetuner.model = self.model 
+                self.finetuner.model.to(self.finetuner.device)
+                self.finetuner.calibrate()
+
+                # finetuner model
+                self.finetuner.init_finetuning_optim()
+                self.finetuner.init_loss()
+                self.finetuner.finetune()
+
+                # validate model
+                acc = self.finetuner.validate()
+
+                if acc > self.max_acc:
+                    self.max_acc = acc
+
+                if acc < self.args.target_acc:
+                    penalty = (acc - self.args.target_acc) * 100000.0
+
+                '''
+                idx, bit = min(enumerate(self.strategy), key = lambda x : x[1])
+                if bit < self.max_bit:
+                    self.strategy[idx] += 1
+                    print(self.strategy)
+                    penalty -= acc
+                    self.model = deepcopy(self.prev_model)
+                else:
+                    # all bits are quantized
+                    self.args.target_acc = self.max_acc
+                    print(f'Failed to achieve target accuracy, new target accuracy is set to {self.max_acc} %')
+                '''
+
+            reward = self.reward(acc, fps, penalty, target = self.args.target)
+
+            if reward > self.best_reward:
+                self.best_reward = reward
+            
+            obs = self.layer_embedding[self.cur_ind, :].copy()
+            done = True
+            info = {'acc' : acc, 'fps' : fps, 'avg_util' : avg_util}
+            return obs, reward, done, False, info 
+        
+        reward = 0 
+
+        self.cur_ind += 1
+        self.index_to_quantize = self.quantizable_idx[self.cur_ind]
+        
+        #if self.max_bit > self.min_bit:
+        #    self.layer_embedding[self.cur_ind][-1] = (float(self.last_action) - float(self.min_bit)) / (float(self.max_bit) - float(self.min_bit))
+        
+        done = False
+        obs = self.layer_embedding[self.cur_ind, :].copy()
+        info = {'acc' : 0.0, 'fps' : 0.0, 'avg_util' : 0.0}
+        return obs, reward, done, False, info
+    
     def reward(self, acc, fps, penalty, target = 'latency'):
+        print(f'penalty = {penalty}')
         if target == 'latency':
             return (acc - self.orig_acc) * 0.1 + penalty
         else:
@@ -323,6 +418,7 @@ class ModelEnv(gym.Env):
     def is_final_layer(self):
         return self.cur_ind == len(self.quantizable_idx) - 1
     
+    '''
     def final_action_wall(self):
         while True:
             model_for_measure = copy.deepcopy(self.model)
@@ -369,7 +465,7 @@ class ModelEnv(gym.Env):
                     penalty -= fps
                     # reduce bitwidth in the hopes that maximum fps is achieved
                     idx, bit = max(enumerate(self.strategy), key = lambda x : x[1])
-                    if bit > self.bound_list[idx]:
+                    if bit > self.min_bit and bit > self.bound_list[idx]:
                         self.strategy[idx] -= 1
                     else:
                         # all bits are quantized
@@ -378,4 +474,59 @@ class ModelEnv(gym.Env):
                         break
             else:
                 break
+        return fps, avg_util, max_util, penalty
+        '''
+    
+    def final_action_wall(self):
+        model_for_measure = copy.deepcopy(self.model)
+        model_for_measure, self.strategy, self.bound_list = self.quantizer.quantize_model(model_for_measure,
+                                                        self.strategy,
+                                                        self.quantizable_idx,
+                                                        self.num_quant_acts,
+                                                        self.bound_list)
+        # export model to qonnx
+        img_shape = self.model_config['center_crop_shape']
+        device, dtype = next(model_for_measure.parameters()).device, next(model_for_measure.parameters()).dtype
+        ref_input = torch.randn(1, 3, img_shape, img_shape, device = device, dtype = dtype)
+        bo.export_qonnx(model_for_measure, ref_input, export_path = 'model.onnx', keep_initializers_as_inputs = False, opset_version = 11, verbose = False)
+    
+        # Transformations
+        model = ModelWrapper('model.onnx')
+        model = preprocessing(model)
+        model = postprocessing(model)
+        model = make_input_channels_last(model)
+        model = tidy_up(model)
+        model = qonnx_to_finn(model)
+        model = streamline_resnet(model)
+        model = convert_to_hw_resnet(model)
+        model = create_dataflow_partition(model)
+        model = specialize_layers(model, self.args.fpga_part)
+        model, cycles, avg_util, max_util = set_folding(model, self.args.board)
+
+        penalty = 0.0
+
+        fps = self.args.freq * 10**6 / cycles
+        if fps > self.max_fps:
+            self.max_fps = fps
+
+        if self.args.target == 'latency':
+            if fps < self.args.target_fps:
+                freq = cycles * self.args.target_fps / 10**6
+
+                if freq <= self.args.max_freq:
+                    print(f'Managed to achieve {self.args.target_fps} fps using freq = {freq} MHz. Consider changing target frequency')
+                
+                print(f'Target fps not achieved (achieved fps: {fps})')
+                penalty = (fps - self.args.target_fps) * 1000.0
+                '''
+                # reduce bitwidth in the hopes that maximum fps is achieved
+                idx, bit = max(enumerate(self.strategy), key = lambda x : x[1])
+                if bit > self.min_bit and bit > self.bound_list[idx]:
+                    self.strategy[idx] -= 1
+                else:
+                    # all bits are quantized
+                    self.args.target_fps = self.max_fps
+                    print(f'Failed to achieve target fps, new target fps is set to {self.max_fps} fps')
+                    break
+                '''    
         return fps, avg_util, max_util, penalty

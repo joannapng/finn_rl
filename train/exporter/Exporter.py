@@ -170,7 +170,7 @@ def set_folding(model, board):
 	model, max_cycles, avg_util, max_util, feasible = folding(model, available_resources)
 
 	if not feasible:
-		return model, max_cycles, avg_util, max_util
+		return model, 1000000, avg_util, max_util
 	else:
 		hw_attrs = [
 		"PE",

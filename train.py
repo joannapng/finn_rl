@@ -95,9 +95,9 @@ def main():
     n_actions = env.action_space.shape[-1]
     
     action_noise = NormalActionNoise(mean=np.zeros(n_actions), sigma=args.noise * np.ones(n_actions))
-    agent = rl_algorithms[args.agent]("MlpPolicy", env, action_noise = action_noise, verbose = 1)
+    agent = rl_algorithms[args.agent]("MlpPolicy", env, action_noise = action_noise, verbose = 1, seed = 6)
     
-    #stop_train_callback = StopTrainingOnNoImprovementCallback(check_freq=500, patience = 3)
+    stop_train_callback = StopTrainingOnNoImprovementCallback(check_freq=len(env.quantizable_idx) * args.log_every, patience = 3)
     agent.learn(total_timesteps=len(env.quantizable_idx) * args.num_episodes, 
                 log_interval=args.log_every)
     agent.save("agents/agent")

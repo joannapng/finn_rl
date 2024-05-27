@@ -71,7 +71,7 @@ def reduceBRAMUsage(model, resources_per_layer, available_resources, max_iters =
 					break
 				elif mem_mode == "internal_decoupled":
 					node_inst.set_nodeattr("ram_style", "ultra")
-					if node_inst.uram_efficiency_estimation() < 0.2:
+					if node_inst.uram_efficiency_estimation() < 0.1:
 						node_inst.set_nodeattr("ram_style", "distributed")
 						break
 			elif op_type == "Channelwise_op_hls":
@@ -149,7 +149,7 @@ def reduceLUTUsage(model, resources_per_layer, available_resources, max_iters = 
 				
 				if ram_style == "distributed":
 					node_inst.set_nodeattr("ram_style", "ultra")
-					if node_inst.uram_efficiency_estimation() < 0.2:
+					if node_inst.uram_efficiency_estimation() < 0.1:
 						node_inst.set_nodeattr("ram_style", "block")
 					break
 			elif op_type == "Thresholding_hls":
@@ -386,6 +386,8 @@ def folding(model, available_resources):
 		sorted_cycles_per_layer = sorted(cycles_per_layer.items(), key = lambda x : x[1], reverse = True)
 		bottleneck_layer, latency = sorted_cycles_per_layer[0]
 		model, increased = increase_folding(model, bottleneck_layer)
+
+		print(f'Latency = {latency} cycles')
 		if not increased:
 			break
 
