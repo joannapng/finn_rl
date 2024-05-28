@@ -12,3 +12,5 @@ agents/*
 checkpoints/*
 *.npy
 *.json
+logs/*
+logs

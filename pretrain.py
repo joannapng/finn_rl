@@ -1,10 +1,10 @@
+import random
+import torch
 import argparse
-import torchvision
 from pretrain.trainer import Trainer
 from pretrain.utils import get_model_config
 
-model_names = sorted(name for name in torchvision.models.__dict__ if name.islower() and not name.startswith("__") and
-                     callable(torchvision.models.__dict__[name]) and not name.startswith("get_"))
+model_names = ['resnet18', 'resnet50']
 
 parser = argparse.ArgumentParser(description = 'Pretraining model parameters')
 
@@ -21,7 +21,7 @@ parser.add_argument('--datadir', default = './data', help='Directory where datas
 parser.add_argument('--dataset', default = 'MNIST', choices = ['MNIST', 'CIFAR10'], help = 'Name of dataset')
 parser.add_argument('--batch-size-training', default = 128, type = int, help = 'Batch size for training')
 parser.add_argument('--batch-size-validation', default = 64, type = int, help = 'Batch size for validation')
-parser.add_argument('--num_workers', default = 32, type = int, help = 'Num workers')
+parser.add_argument('--num-workers', default = 32, type = int, help = 'Num workers')
 parser.add_argument('--validation-split', default = 0.2, type = float, help = 'Training-Validation split')
 
 # Trainer Parameters
@@ -46,8 +46,17 @@ parser.add_argument('--loss', default = 'CrossEntropy', choices = ['CrossEntropy
 # Device Parameters
 parser.add_argument('--device', default = 'GPU', help = 'Device for training')
 
+parser.add_argument('--seed', default = 234, type = int, help = 'Seed for reproducibility')
+
 def main():
     args = parser.parse_args()
+
+    # set seed
+    random.seed(args.seed)
+    torch.manual_seed(args.seed)
+    if args.device == 'GPU' and torch.cuda.is_available():
+        torch.cuda.manual_seed_all(args.seed)
+
     trainer = Trainer(args, get_model_config(args.model_name, args.custom_model_name, args.dataset))
     trainer.train_model()
 

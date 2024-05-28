@@ -24,33 +24,8 @@ def get_model_config(model_name, custom_model_name, dataset):
         input_shape = 32
         resize_shape = 32
 
-    #TODO: ADD FOR IMAGENET
     config.update({'resize_shape': resize_shape, 'center_crop_shape': input_shape})
     return config
-
-    '''
-    # Set-up config parameters
-    if custom_model_name is not None:
-        input_shape = 28
-        resize_shape = 28
-        config['inception_preprocessing'] = False
-    else:
-        # parameters for imagenet
-        if model_name == 'inception_v3' or model_name == 'googlenet':
-            config['inception_preprocessing'] = True
-        else:
-            config['inception_preprocessing'] = False
-
-        if model_name == 'inception_v3':
-            input_shape = 299
-            resize_shape = 342
-        else:
-            input_shape = 224
-            resize_shape = 256
-
-    config.update({'resize_shape': resize_shape, 'center_crop_shape': input_shape})
-    return config
-    '''
 
 def get_torchvision_model(model_name, num_classes, device, pretrained=False, dataset = "CIFAR10"):
     model_fn = getattr(torchvision.models, model_name)
@@ -61,18 +36,12 @@ def get_torchvision_model(model_name, num_classes, device, pretrained=False, dat
             model = model_fn(transform_input=False, num_classes = num_classes)
     else:
         if pretrained == True:
-            '''
-            if dataset == "CIFAR10" and "resnet18" in model_name:
-                model = model_fn(num_classes = num_classes)
-                state_dict = hub.load_state_dict_from_url(resnet18_url, progress = True)
-                model.load_state_dict(state_dict, strict=True)
-            '''
-            #else:
             model = model_fn(num_classes = num_classes, weights = "DEFAULT")
         else:
             model = model_fn(num_classes = num_classes)
     return model.to(device)
 
+# For resnet, introduce a relu activation for the residual connections
 def add_relu_after_bn():
     BasicBlock.forward = basic_block_forward
     Bottleneck.forward = bottleneck_forward

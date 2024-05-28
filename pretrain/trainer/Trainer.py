@@ -99,14 +99,6 @@ class Trainer(object):
 				transforms.ToTensor(),
 				normalize
 			])
-		else:
-			# for imagenet
-			transformations = transforms.Compose([
-					transforms.Resize(config['resize_shape']),
-					transforms.CenterCrop(config['center_crop_shape']),
-					transforms.ToTensor(),
-					normalize
-				])
 
 		train_set = builder(root=args.datadir,
 							train=True,
@@ -119,7 +111,6 @@ class Trainer(object):
 						   transform=transformations)
 		
 		train_set, val_set = random_split(train_set, [1 - args.validation_split, args.validation_split])
-
 
 		self.train_loader = DataLoader(train_set,
 									   batch_size = self.batch_size_training,
@@ -149,14 +140,14 @@ class Trainer(object):
 			add_relu_after_bn()
 
 		if self.args.resume_from is not None and not self.args.pretrained: # resume training from checkpoint
-			print('Loading model from checkpoint at: {}'.format(self.args.resume_from))
+			print('=>Loading model from checkpoint at: {}'.format(self.args.resume_from))
 			package = torch.load(self.args.resume_from, map_location = self.device)
 			self.model.load_state_dict(package['state_dict'])
 			self.best_val_acc = package['best_val_acc']
 			self.model.to(self.device)
 		
 		if self.args.pretrained and self.args.model_path is not None:
-			print('Loading pretrained model')
+			print('=>Loading pretrained model')
 			package = torch.load(self.args.model_path, map_location = self.device)
 			self.model.load_state_dict(package['state_dict'])
 			self.model.to(self.device)
@@ -259,7 +250,7 @@ class Trainer(object):
 			test_accuracy = self.check_accuracy(self.test_loader, self.model)
 			self.checkpoint(name, -1, test_accuracy, 'best.tar')
 		else:
-			print("Starting training")
+			print('Starting training')
 
 			num_steps = len(self.train_loader)
 			for epoch in range(self.starting_epoch, self.training_epochs):

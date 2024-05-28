@@ -189,7 +189,7 @@ class Quantizer(object):
 
         return quant_layer_map, quant_act_map, quant_identity_map
     
-    def quantize_model(self, model, strategy, quantizable_idx, num_quant_acts, bound_list):
+    def quantize_model(self, model, strategy, quantizable_idx, num_quant_acts):
         ignore_missing_keys_state = config.IGNORE_MISSING_KEYS
         config.IGNORE_MISSING_KEYS = True
         training_state = model.training
@@ -201,10 +201,7 @@ class Quantizer(object):
         
         # quantize activations
         for i in range(num_quant_acts):
-            model, modified_bit_width = self.quantize_act(model, quantizable_idx[i], int(strategy[i]))
-            if modified_bit_width:
-                strategy[i] = 2
-                bound_list[i] = 2
+            model = self.quantize_act(model, quantizable_idx[i], int(strategy[i]))
 
         # quantize add outputs and handle residuals
         self.quantize_output(model)
@@ -220,7 +217,7 @@ class Quantizer(object):
         model.train(training_state)
         config.IGNORE_MISSING_KEYS = ignore_missing_keys_state
 
-        return model, strategy, bound_list
+        return model
 
     def update_index(self, model, quantizable_idx):
         idx = 0
@@ -260,22 +257,11 @@ class Quantizer(object):
                      act_bit_width):
         
         layer_map = self.quantize_kwargs['quant_act_map']
-        modified_bit_width = False
 
         for i, node in enumerate(model.graph.nodes):
             if node.op == 'call_module' and i == act_idx:
                 module = get_module(model, node.target)
                 if isinstance(module, tuple(layer_map.keys())):       
-                    # if the target is convolution next and the bitwidth is 1
-                    # then increase because we need to be able to represent 0
-                    for n in node.users:
-                        if n.op == 'call_module':
-                            m = get_module(model, n.target)
-                            if isinstance(m, nn.Conv2d) or isinstance(m, qnn.QuantConv2d):
-                                if act_bit_width == 1:
-                                    act_bit_width += 1
-                                    print("increased activation bit width")
-                                    modified_bit_width = True
                     
                     quant_module_class, quant_module_kwargs = layer_map[type(module)]
                     quant_module_kwargs['bit_width'] = act_bit_width
@@ -299,7 +285,7 @@ class Quantizer(object):
                     break
             
         model = rewriter.apply(model)
-        return model, modified_bit_width
+        return model
          
     def quantize_output(self,
                         model):

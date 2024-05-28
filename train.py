@@ -1,43 +1,27 @@
-import argparse
-from gc import callbacks
-import torch
-import torchvision
-import numpy as np
-from train.env import ModelEnv
-from pretrain.utils import get_model_config
-from stable_baselines3.common.monitor import Monitor
-from stable_baselines3.common.noise import NormalActionNoise
-from train.callbacks.StopTrainingOnNoImprovementCallback import StopTrainingOnNoImprovementCallback
-from stable_baselines3 import A2C, DDPG, PPO, SAC, TD3
-from copy import deepcopy
-import multiprocessing as mp
-from finn.util.basic import part_map, alveo_default_platform
-from agent.ddpg import DDPG
-import math
+from cgitb import text
 import os
+import math
+import torch
+import random
+import argparse
+from copy import deepcopy
+from agent.ddpg import DDPG
+from train.env import ModelEnv
+from finn.util.basic import part_map
 from tensorboardX import SummaryWriter
+from pretrain.utils import get_model_config
 
-rl_algorithms = {
-    'A2C': A2C,
-    'DDPG': DDPG,
-    'PPO': PPO,
-    'SAC': SAC,
-    'TD3': TD3
-}
+model_names = ['resnet18', 'resnet50']
 
-model_names = sorted(name for name in torchvision.models.__dict__ if name.islower() and not name.startswith("__") and
-                     callable(torchvision.models.__dict__[name]) and not name.startswith("get_"))
-
-parser = argparse.ArgumentParser(description = 'Train RL Agents')
+parser = argparse.ArgumentParser(description = 'Train RL Agent')
 
 ### ----- TARGET MODEL ------ ###
-# Model Parameters
 parser.add_argument('--model-name', default='resnet18', metavar='ARCH', choices=model_names,
                     help = 'model_architecture: ' + ' | '.join(model_names) + ' (default: resnet18)')
 parser.add_argument('--custom-model-name', default = None, help = 'Custom model architecture. Overrides --model-name')
 parser.add_argument('--model-path', default = None, help = 'Path to pretrained model')
 
-# Dataset Parameters
+### ----- DATASET PARAMETERS ----- ###
 parser.add_argument('--datadir', default = './data', help='Directory where datasets are stored')
 parser.add_argument('--dataset', default = 'MNIST', choices = ['MNIST', 'CIFAR10'], help = 'Name of dataset')
 parser.add_argument('--batch-size-finetuning', default = 64, type = int, help = 'Batch size for finetuning')
@@ -46,16 +30,12 @@ parser.add_argument('--num-workers', default = 32, type = int, help = 'Num worke
 parser.add_argument('--calib-subset', default = 0.1, type = float, help = 'Percentage of training dataset for calibration')
 parser.add_argument('--finetuning-subset', default = 0.5, type = float, help = 'Percentage of dataset to use for finetuning')
 
-# Trainer Parameters
+### ----- FINETUNER PARAMETERS ----- ###
 parser.add_argument('--finetuning-epochs', default = 5, type = int, help = 'Finetuning epochs')
 parser.add_argument('--print-every', default = 100, type = int, help = 'How frequent to print progress')
-
-# Optimizer Parameters
 parser.add_argument('--optimizer', default = 'Adam', choices = ['Adam', 'SGD'], help = 'Optimizer')
 parser.add_argument('--finetuning-lr', default = 1e-5, type = float, help = 'Training learning rate')
 parser.add_argument('--weight-decay', default = 0, type = float, help = 'Weight decay for optimizer')
-
-# Loss Parameters
 parser.add_argument('--loss', default = 'CrossEntropy', choices = ['CrossEntropy'], help = 'Loss Function for training')
 
 # Device Parameters
@@ -63,16 +43,14 @@ parser.add_argument('--device', default = 'GPU', help = 'Device for training')
 
 ### ----- QUANTIZATION PARAMETERS ----- ###
 parser.add_argument('--scale-factor-type', default='float_scale', choices=['float_scale', 'po2_scale'], help = 'Type for scale factors (default: float)')
-parser.add_argument('--act-bit-width', default=4, type=int, help = 'Activations bit width (default: 4)')
-parser.add_argument('--weight-bit-width', default=4, type=int, help = 'Weight bit width (default: 4)')
+parser.add_argument('--act-bit-width', default=4, type=int, help = 'Default activations bit width (default: 4)')
+parser.add_argument('--weight-bit-width', default=4, type=int, help = 'Default weight bit width (default: 4)')
 parser.add_argument('--bias-bit-width', default=8, choices=[32, 16, 8], help = 'Bias bit width (default: 8)')
 parser.add_argument('--bias-corr', default=True, action = 'store_true', help = 'Bias correction after calibration (default: enabled)')
 parser.add_argument('--min-bit', type=int, default=1, help = 'Minimum bit width (default: 1)')
 parser.add_argument('--max-bit', type=int, default=8, help = 'Maximum bit width (default: 8)')
 
 ### ----- AGENT ------ ###
-#parser.add_argument('--agent', default = 'TD3', choices = ['A2C', 'DDPG', 'PPO', 'SAC', 'TD3'], help = 'Choose algorithm to train agent')
-#parser.add_argument('--noise', default = 0.1, type = float, help = 'Std for added noise in agent')
 parser.add_argument('--hidden1', default = 300, type = int, help = 'Hidden num of first fully connected layer')
 parser.add_argument('--hidden2', default = 300, type = int, help = 'Hidden num of second fully connected layer')
 parser.add_argument('--lr_c', default = 1e-3, type = float, help = 'Learning rate for actor')
@@ -86,7 +64,7 @@ parser.add_argument('--tau', default=0.01, type=float, help='moving average for 
 parser.add_argument('--init_delta', default=0.5, type=float, help='initial variance of truncated normal distribution')
 parser.add_argument('--delta_decay', default=0.99, type=float, help='delta decay during exploration')
 parser.add_argument('--n_update', default=1, type=int, help='number of rl to update each time')
-parser.add_argument('--output', default='../../save', type=str, help='')
+parser.add_argument('--output', default='./logs', type=str, help='')
 
 parser.add_argument('--num-episodes', default = 100, type = int, help = 'Number of episodes (passes over the entire network) to train the agent for')
 parser.add_argument('--log-every', default = 10, type = int, help = 'How many episodes to wait to log agent')
@@ -94,7 +72,6 @@ parser.add_argument('--seed', default = 234, type = int, help = 'Seed to reprodu
 parser.add_argument('--init_w', default=0.003, type=float, help='')
 parser.add_argument('--epsilon', default=50000, type=int, help='linear decay of exploration policy')
 parser.add_argument('--train_episode', default=600, type=int, help='train iters each timestep')
-
 
 ### --- DESIGN --- ###
 parser.add_argument('--board', default = "U250", help = "Name of target board")
@@ -104,7 +81,7 @@ parser.add_argument('--max-freq', type = float, default = 300.0, help = 'Maximum
 
 parser.add_argument('--target', default = 'latency', choices = ['accuracy', 'latency'], help = 'Objective to optimize model for')
 parser.add_argument('--target-acc', default = 65.0, type = float, help = 'Minimum accuracy when target is latency')
-parser.add_argument('--target-fps', default = 2000, type = float, help = 'Target fps when target is accuracy')
+parser.add_argument('--target-fps', default = 20000, type = float, help = 'Target fps when target is accuracy')
 
 def train(num_episode, agent, env, output, debug=False):
     # best record
@@ -148,7 +125,6 @@ def train(num_episode, agent, env, output, debug=False):
             text_writer.write('#{}: episode_reward:{:.4f} acc: {:.4f}, fps: {:.4f}\n'.format(episode, episode_reward,
                                                                                          info['accuracy'],
                                                                                          info['fps']))
-
             final_reward = T[-1][0]
             # agent observe and update policy
             for i, (r_t, s_t, s_t1, a_t, done) in enumerate(T):
@@ -188,6 +164,8 @@ def train(num_episode, agent, env, output, debug=False):
 
             text_writer.write('best reward: {}\n'.format(best_reward))
             text_writer.write('best policy: {}\n'.format(best_policy))
+            text_writer.flush()
+
     text_writer.close()
     return best_policy, best_reward
 
@@ -198,13 +176,22 @@ tfwriter = SummaryWriter(logdir=args.output)
 text_writer = open(os.path.join(args.output, 'log.txt'), 'w')
 print('==> Output path: {}...'.format(args.output))
 
+# set seed to reproduce
+random.seed(args.seed)
+torch.manual_seed(args.seed)
+if args.device == 'GPU' and torch.cuda.is_available():
+    torch.cuda.manual_seed_all(args.seed)
+
+# create environment
 env = ModelEnv(args, get_model_config(args.model_name, args.custom_model_name, args.dataset))
 
 nb_actions = env.action_space.shape[-1]
 nb_states = env.observation_space.shape[-1]
 
+# create agent
 agent = DDPG(nb_states, nb_actions, args)
 
+# train agent
 best_policy, best_reward = train(args.train_episode, agent, env, args.output)
 print('best_reward: ', best_reward)
 print('best_policy: ', best_policy)
