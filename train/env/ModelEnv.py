@@ -30,7 +30,9 @@ from ..exporter.Exporter import (
     resource_estimates,
     streamline_resnet,
     convert_to_hw_resnet,
-    name_nodes
+    name_nodes,
+    streamline_lenet,
+    convert_to_hw_lenet
 )
 from ..utils import measure_model
 
@@ -58,7 +60,7 @@ class ActTypes(IntEnum):
     RELU6 = 1
     SIGMOID = 2
 
-class ModelEnv(gym.Env):
+class ModelEnv:
     def __init__(self, args, model_config):
         self.args = args
 
@@ -193,8 +195,6 @@ class ModelEnv(gym.Env):
         self.layer_embedding = layer_embedding
 
     def reset(self, seed = None, option = None):
-        super().reset(seed = seed)
-
         self.model = copy.deepcopy(self.orig_model).to(self.finetuner.device)
         self.build_state_embedding()
 
@@ -385,8 +385,8 @@ class ModelEnv(gym.Env):
             
             obs = self.layer_embedding[self.cur_ind, :].copy()
             done = True
-            info = {'acc' : acc, 'fps' : fps, 'avg_util' : avg_util}
-            return obs, reward, done, False, info 
+            info = {'accuracy' : acc, 'fps' : fps, 'avg_util' : avg_util}
+            return obs, reward, done, info 
         
         reward = 0 
 
@@ -398,8 +398,8 @@ class ModelEnv(gym.Env):
         
         done = False
         obs = self.layer_embedding[self.cur_ind, :].copy()
-        info = {'acc' : 0.0, 'fps' : 0.0, 'avg_util' : 0.0}
-        return obs, reward, done, False, info
+        info = {'accuracy' : 0.0, 'fps' : 0.0, 'avg_util' : 0.0}
+        return obs, reward, done, info
     
     def reward(self, acc, fps, penalty, target = 'latency'):
         print(f'penalty = {penalty}')
@@ -409,10 +409,10 @@ class ModelEnv(gym.Env):
             return fps + penalty
         
     def get_action(self, action):
-        action = float(action[0])
-        lbound, rbound = self.min_bit, self.max_bit
-        action = (action + 1) * (rbound - lbound) / 2.0 + self.min_bit - 0.5
-        action = np.ceil(action).astype(int)
+        action = float(action)
+        lbound, rbound = self.min_bit - 0.5, self.max_bit + 0.5  # same stride length for each bit
+        action = (rbound - lbound) * action + lbound
+        action = int(np.round(action, 0))
         return action
 
     def is_final_layer(self):
@@ -487,7 +487,7 @@ class ModelEnv(gym.Env):
         # export model to qonnx
         img_shape = self.model_config['center_crop_shape']
         device, dtype = next(model_for_measure.parameters()).device, next(model_for_measure.parameters()).dtype
-        ref_input = torch.randn(1, 3, img_shape, img_shape, device = device, dtype = dtype)
+        ref_input = torch.randn(1, self.finetuner.in_channels, img_shape, img_shape, device = device, dtype = dtype)
         bo.export_qonnx(model_for_measure, ref_input, export_path = 'model.onnx', keep_initializers_as_inputs = False, opset_version = 11, verbose = False)
     
         # Transformations
@@ -497,8 +497,10 @@ class ModelEnv(gym.Env):
         model = make_input_channels_last(model)
         model = tidy_up(model)
         model = qonnx_to_finn(model)
-        model = streamline_resnet(model)
-        model = convert_to_hw_resnet(model)
+        model.save('qonnx_finn.onnx')
+        model = streamline_lenet(model)
+        model.save('streamlined.onnx')
+        model = convert_to_hw_lenet(model)
         model = create_dataflow_partition(model)
         model = specialize_layers(model, self.args.fpga_part)
         model, cycles, avg_util, max_util = set_folding(model, self.args.board)

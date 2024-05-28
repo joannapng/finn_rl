@@ -237,6 +237,25 @@ def resource_estimates(model):
 	layer_resources["total"] = aggregate_dict_keys(layer_resources)
 	return layer_resources["total"]
 
+def streamline_lenet(model):
+	model = model.transform(ConvertSubToAdd())
+	model = model.transform(ConvertDivToMul())
+	model = model.transform(absorb.AbsorbSignBiasIntoMultiThreshold())
+	model = model.transform(absorb.AbsorbAddIntoMultiThreshold())
+	model = model.transform(absorb.AbsorbMulIntoMultiThreshold())
+	model = model.transform(absorb.AbsorbScalarMulAddIntoTopK())
+	model = model.transform(reorder.MoveMulPastMaxPool())
+	model = model.transform(reorder.MoveScalarLinearPastInvariants())
+	model = model.transform(reorder.MoveScalarMulPastConv())
+	model = model.transform(reorder.MoveScalarMulPastMatMul())
+	model = model.transform(absorb.AbsorbMulIntoMultiThreshold())
+	model = model.transform(RoundAndClipThresholds())
+
+	model = model.transform(InferDataLayouts())
+	model = model.transform(RemoveUnusedTensors())
+
+	return model
+
 def streamline_resnet(model):
 	model = model.transform(ConvertSubToAdd())
 	model = model.transform(ConvertDivToMul())
@@ -302,6 +321,29 @@ def convert_to_hw_resnet(model):
 	model = tidy_up(model)
 	model = model.transform(convert.InferAddStreamsLayer())
 	model = model.transform(convert.InferDuplicateStreamsLayer())
+
+	return model
+
+def convert_to_hw_lenet(model):
+	model = model.transform(InferDataLayouts())
+	model = model.transform(convert.InferPool())
+	model = model.transform(LowerConvsToMatMul())
+	model = model.transform(convert.InferConvInpGen())
+	model = model.transform(convert.InferQuantizedMatrixVectorActivation())
+	model = model.transform(convert.InferBinaryMatrixVectorActivation())
+	model = model.transform(absorb.AbsorbTransposeIntoMultiThreshold())
+	model = model.transform(absorb.AbsorbConsecutiveTransposes())
+
+	model = model.transform(InferDataLayouts())
+	model = model.transform(RoundAndClipThresholds())
+	model = model.transform(convert.InferThresholdingLayer())
+
+	model = model.transform(InferDataLayouts())
+	model = model.transform(convert.InferLabelSelectLayer())
+
+	model = model.transform(InferDataLayouts())
+	model = model.transform(RemoveCNVtoFCFlatten())
+	model = tidy_up(model)
 
 	return model
 
