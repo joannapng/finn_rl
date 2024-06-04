@@ -120,6 +120,10 @@ class ModelEnv:
 
         print('=> Original Accuracy: {:.3f}%'.format(self.orig_acc * 100))
 
+        # find maximum fps (minimum bitwidth in all layers and maximum folding
+        self.maximum_fps()
+
+
     def build_state_embedding(self):
         self.model = preprocess_for_quantize(self.model)
 
@@ -230,7 +234,7 @@ class ModelEnv:
             print(self.strategy)
             
             if self.args.target == 'latency':
-                fps, avg_util, max_util, penalty = self.final_action_wall()
+                fps, avg_util, max_util = self.final_action_wall()
                 self.model = self.quantizer.quantize_model(self.model,
                                                 self.strategy,
                                                 self.quantizable_idx,
@@ -248,48 +252,7 @@ class ModelEnv:
                 # validate model
                 acc = self.finetuner.validate()
                 
-            elif self.args.target == 'accuracy':
-                penalty = 0.0
-                
-                fps, avg_util, max_util, penalty = self.final_action_wall()
-                self.prev_model = deepcopy(self.model)
-                self.model = self.quantizer.quantize_model(self.model,
-                                                self.strategy,
-                                                self.quantizable_idx,
-                                                self.num_quant_acts)
-                
-                self.finetuner.model = self.model 
-                self.finetuner.model.to(self.finetuner.device)
-                self.finetuner.calibrate()
-
-                # finetuner model
-                self.finetuner.init_finetuning_optim()
-                self.finetuner.init_loss()
-                self.finetuner.finetune()
-
-                # validate model
-                acc = self.finetuner.validate()
-
-                if acc > self.max_acc:
-                    self.max_acc = acc
-
-                if acc < self.args.target_acc:
-                    penalty = (acc - self.args.target_acc) * 100000.0
-
-                '''
-                idx, bit = min(enumerate(self.strategy), key = lambda x : x[1])
-                if bit < self.max_bit:
-                    self.strategy[idx] += 1
-                    print(self.strategy)
-                    penalty -= acc
-                    self.model = deepcopy(self.prev_model)
-                else:
-                    # all bits are quantized
-                    self.args.target_acc = self.max_acc
-                    print(f'Failed to achieve target accuracy, new target accuracy is set to {self.max_acc} %')
-                '''
-
-            reward = self.reward(acc, fps, penalty, target = self.args.target)
+            reward = self.reward(acc)
 
             if reward > self.best_reward:
                 self.best_reward = reward
@@ -311,12 +274,8 @@ class ModelEnv:
         info = {'accuracy' : 0.0, 'fps' : 0.0, 'avg_util' : 0.0}
         return obs, reward, done, info
     
-    def reward(self, acc, fps, penalty, target = 'latency'):
-        print(f'penalty = {penalty}')
-        if target == 'latency':
-            return (acc - self.orig_acc) * 0.1 + penalty
-        else:
-            return fps + penalty
+    def reward(self, acc):
+        return (acc - self.orig_acc) * 0.1
         
     def get_action(self, action):
         action = float(action)
@@ -349,48 +308,36 @@ class ModelEnv:
             model = make_input_channels_last(model)
             model = tidy_up(model)
             model = qonnx_to_finn(model)
-            model = streamline_lenet(model)
-            model = convert_to_hw_lenet(model)
+            model = streamline_resnet(model)
+            model = convert_to_hw_resnet(model)
             model = create_dataflow_partition(model)
             model = specialize_layers(model, self.args.fpga_part)
             model, cycles, avg_util, max_util = set_folding(model, self.args.board)
 
-            penalty = 0.0
-
             fps = self.args.freq * 10**6 / cycles
-            if fps > self.max_fps:
-                self.max_fps = fps
 
-            if self.args.target == 'latency':
-                if fps >= self.args.target_fps:
-                    break
-                else:
-                    freq = cycles * self.args.target_fps / 10**6
-
-                    if freq <= self.args.max_freq:
-                        print(f'Managed to achieve {self.args.target_fps} fps using freq = {freq} MHz. Consider changing target frequency')
-                    
-                    print(f'Target fps not achieved (achieved fps: {fps})')
-                    penalty -= fps
-                    # reduce bitwidth in the hopes that maximum fps is achieved
-                    idx, bit = max(enumerate(self.strategy), key = lambda x : x[1])
-                    print(self.strategy)
-                    print(self.bound_list)
-                    if bit > self.min_bit and bit > self.bound_list[idx][0]:
-                        self.strategy[idx] -= 1
-                    else:
-                        # all bits are quantized
-                        self.args.target_fps = self.max_fps
-                        print(f'Failed to achieve target fps, new target fps is set to {self.max_fps} fps')
-                        break
-            else:
+            if fps >= self.args.target_fps:
                 break
-        return fps, avg_util, max_util, penalty
-    '''
-    def final_action_wall(self):
+            else:
+                freq = cycles * self.args.target_fps / 10**6
+
+                if freq <= self.args.max_freq:
+                    print(f'Managed to achieve {self.args.target_fps} fps using freq = {freq} MHz. Consider changing target frequency')
+                
+                print(f'Target fps not achieved (achieved fps: {fps})')
+                # reduce bitwidth in the hopes that maximum fps is achieved
+                idx, bit = max(enumerate(self.strategy), key = lambda x : x[1])
+                if bit > self.min_bit and bit > self.bound_list[idx][0]:
+                    self.strategy[idx] -= 1
+
+        return fps, avg_util, max_util
+    
+    def maximum_fps(self):
+        strategy = [self.bound_list[i][0] for i in range(len(self.quantizable_idx))]
+        print(strategy)
         model_for_measure = copy.deepcopy(self.model)
-        model_for_measure =  self.quantizer.quantize_model(model_for_measure,
-                                                        self.strategy,
+        model_for_measure = self.quantizer.quantize_model(model_for_measure,
+                                                        strategy,
                                                         self.quantizable_idx,
                                                         self.num_quant_acts)
         # export model to qonnx
@@ -406,37 +353,16 @@ class ModelEnv:
         model = make_input_channels_last(model)
         model = tidy_up(model)
         model = qonnx_to_finn(model)
-        model.save('qonnx_finn.onnx')
-        model = streamline_lenet(model)
-        model.save('streamlined.onnx')
-        model = convert_to_hw_lenet(model)
+        model = streamline_resnet(model)
+        model = convert_to_hw_resnet(model)
         model = create_dataflow_partition(model)
         model = specialize_layers(model, self.args.fpga_part)
         model, cycles, avg_util, max_util = set_folding(model, self.args.board)
-
-        penalty = 0.0
-
         fps = self.args.freq * 10**6 / cycles
-        if fps > self.max_fps:
-            self.max_fps = fps
 
-        if self.args.target == 'latency':
-            if fps < self.args.target_fps:
-                freq = cycles * self.args.target_fps / 10**6
-
-                if freq <= self.args.max_freq:
-                    print(f'Managed to achieve {self.args.target_fps} fps using freq = {freq} MHz. Consider changing target frequency')
-                
-                print(f'Target fps not achieved (achieved fps: {fps})')
-                penalty = (fps - self.args.target_fps) * 1000.0
-                # reduce bitwidth in the hopes that maximum fps is achieved
-                idx, bit = max(enumerate(self.strategy), key = lambda x : x[1])
-                if bit > self.min_bit and bit > self.bound_list[idx]:
-                    self.strategy[idx] -= 1
-                else:
-                    # all bits are quantized
-                    self.args.target_fps = self.max_fps
-                    print(f'Failed to achieve target fps, new target fps is set to {self.max_fps} fps')
-                    break
-        return fps, avg_util, max_util, penalty
-        '''
+        print(f'=> Maximum achievable fps at {self.args.freq} MHz: {fps} fps')
+        
+        if fps < self.args.target_fps:
+            print(f'=> Target fps not achievable, changing target fps from {self.args.target_fps} to {fps}')
+        
+        self.args.target_fps = fps
