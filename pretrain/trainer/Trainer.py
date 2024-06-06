@@ -11,14 +11,15 @@ from torchvision import transforms
 from torchvision.datasets import CIFAR10, MNIST
 import torchvision.models
 from ..logger import Logger
-from ..models import LeNet5, Simple
+from ..models import LeNet5, ResNet18, ResNet34, ResNet50, ResNet101, ResNet152
 from ..utils import *
 
-resnets = sorted(name for name in torchvision.models.__dict__ if name.islower() and not name.startswith("__") and
-					 callable(torchvision.models.__dict__[name]) and not name.startswith("get_") and "resnet" in name) 
-
 networks = {'LeNet5' : LeNet5,
-			'Simple' : Simple}
+			'resnet18' : ResNet18, 
+			'resnet34' : ResNet34,
+			'resnet50' : ResNet50,
+			'resnet101' : ResNet101,
+			'resnet152' : ResNet152}
 
 class Trainer(object):
 	def __init__(self, args, model_config):
@@ -81,8 +82,8 @@ class Trainer(object):
 			self.in_channels = 3
 
 			transformations = transforms.Compose([
-				transforms.Resize(32),
-				transforms.CenterCrop(32),
+				transforms.RandomCrop(32, padding = 4),
+				transforms.RandomHorizontalFlip(),
 				transforms.ToTensor(),
 				normalize
 			])
@@ -129,15 +130,8 @@ class Trainer(object):
 	def init_model(self):
 		self.best_val_acc = 0.0
 
-		if self.args.custom_model_name is not None:
-			builder = networks[self.args.custom_model_name]
-			self.model = builder(num_classes = self.num_classes, in_channels = self.in_channels).to(self.device)
-		else:
-			# if model-path is specified, it will be loaded below
-			self.model = get_torchvision_model(self.args.model_name, self.num_classes, self.device, self.args.pretrained and self.args.model_path is None)
-
-		if self.args.model_name in resnets:
-			add_relu_after_bn()
+		builder = networks[self.args.model_name]
+		self.model = builder(num_classes = self.num_classes, in_channels = self.in_channels).to(self.device)
 
 		if self.args.resume_from is not None and not self.args.pretrained: # resume training from checkpoint
 			print('=>Loading model from checkpoint at: {}'.format(self.args.resume_from))
@@ -153,10 +147,7 @@ class Trainer(object):
 			self.model.to(self.device)
 			
 	def init_output(self):
-		if self.args.custom_model_name is not None:
-			name = "{}_{}".format(self.args.custom_model_name, uuid.uuid4())
-		else:
-			name = "{}_{}".format(self.args.model_name, uuid.uuid4())
+		name = "{}_{}".format(self.args.model_name, uuid.uuid4())
 		
 		self.output_dir_path = os.path.join(self.args.save_dir, name)
 
@@ -244,7 +235,7 @@ class Trainer(object):
 		return acc
 
 	def train_model(self):
-		name = self.args.custom_model_name if self.args.custom_model_name is not None else self.args.model_name
+		name = self.args.model_name
 		if self.args.pretrained == True:
 			print('Storing pretrained model')
 			test_accuracy = self.check_accuracy(self.test_loader, self.model)

@@ -14,3 +14,4 @@ checkpoints/*
 *.json
 logs/*
 logs
+LeNet5/

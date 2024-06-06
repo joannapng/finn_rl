@@ -9,7 +9,7 @@ from torch import hub
 root_url = 'https://github.com/Xilinx/brevitas/releases/download/'
 resnet18_url =  f"{root_url}/a2q_cifar10_r1/float_resnet18-1d98d23a.pth"
 
-def get_model_config(model_name, custom_model_name, dataset):
+def get_model_config(model_name, dataset):
     config = dict()
 
     if model_name == 'inception_v3' or model_name == 'googlenet':

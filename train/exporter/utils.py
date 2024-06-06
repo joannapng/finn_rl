@@ -48,7 +48,7 @@ def estimate_cycles(model):
 	
 	return cycle_dict
 
-def reduceBRAMUsage(model, resources_per_layer, available_resources, max_iters = 10):
+def reduceBRAMUsage(model, resources_per_layer, available_resources, max_iters = 5):
 	sorted_resources_per_layer = sorted(resources_per_layer.items(), key = lambda x : x[1]['BRAM_18K'], reverse = True)
 
 	resources_total = aggregate_dict_keys(resources_per_layer)
@@ -91,7 +91,7 @@ def reduceBRAMUsage(model, resources_per_layer, available_resources, max_iters =
 	
 	return model
 
-def reduceDSPUsage(model, resources_per_layer, available_resources, max_iters = 10):
+def reduceDSPUsage(model, resources_per_layer, available_resources, max_iters = 5):
 	sorted_resources_per_layer = sorted(resources_per_layer.items(), key = lambda x : x[1]['DSP'], reverse = True)
 	
 	resources_total = aggregate_dict_keys(resources_per_layer)
@@ -117,7 +117,7 @@ def reduceDSPUsage(model, resources_per_layer, available_resources, max_iters = 
 			
 	return model
 
-def reduceLUTUsage(model, resources_per_layer, available_resources, max_iters = 10):
+def reduceLUTUsage(model, resources_per_layer, available_resources, max_iters = 5):
 	sorted_resources_per_layer = sorted(resources_per_layer.items(), key = lambda x : x[1]['LUT'], reverse = True)
 	
 	resources_total = aggregate_dict_keys(resources_per_layer)
@@ -165,7 +165,7 @@ def reduceLUTUsage(model, resources_per_layer, available_resources, max_iters = 
 			
 	return model
 
-def reduceURAMUsage(model, resources_per_layer, available_resources, max_iters = 10):
+def reduceURAMUsage(model, resources_per_layer, available_resources, max_iters = 5):
 	sorted_resources_per_layer = sorted(resources_per_layer.items(), key = lambda x : x[1]['URAM'], reverse = True)
 	
 	resources_total = aggregate_dict_keys(resources_per_layer)
@@ -387,7 +387,7 @@ def folding(model, available_resources):
 		bottleneck_layer, latency = sorted_cycles_per_layer[0]
 		model, increased = increase_folding(model, bottleneck_layer)
 
-		print(f'Latency = {latency} cycles')
+		print(f'New latency = {latency} cycles')
 		if not increased:
 			break
 

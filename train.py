@@ -1,4 +1,3 @@
-from cgitb import text
 import os
 import math
 import torch
@@ -8,17 +7,15 @@ from copy import deepcopy
 from agent.ddpg import DDPG
 from train.env import ModelEnv
 from finn.util.basic import part_map
-from tensorboardX import SummaryWriter
 from pretrain.utils import get_model_config
 
-model_names = ['resnet18', 'resnet50']
+model_names = ['LeNet5', 'resnet18', 'resnet34', 'resnet50', 'resnet100', 'resnet152']
 
 parser = argparse.ArgumentParser(description = 'Train RL Agent')
 
 ### ----- TARGET MODEL ------ ###
 parser.add_argument('--model-name', default='resnet18', metavar='ARCH', choices=model_names,
                     help = 'model_architecture: ' + ' | '.join(model_names) + ' (default: resnet18)')
-parser.add_argument('--custom-model-name', default = None, help = 'Custom model architecture. Overrides --model-name')
 parser.add_argument('--model-path', default = None, help = 'Path to pretrained model')
 
 ### ----- DATASET PARAMETERS ----- ###
@@ -71,14 +68,13 @@ parser.add_argument('--log-every', default = 10, type = int, help = 'How many ep
 parser.add_argument('--seed', default = 234, type = int, help = 'Seed to reproduce')
 parser.add_argument('--init_w', default=0.003, type=float, help='')
 parser.add_argument('--epsilon', default=50000, type=int, help='linear decay of exploration policy')
-parser.add_argument('--train_episode', default=600, type=int, help='train iters each timestep')
 
 ### --- DESIGN --- ###
 parser.add_argument('--board', default = "U250", help = "Name of target board")
 parser.add_argument('--shell-flow-type', default = "vitis_alveo", choices = ["vivado_zynq", "vitis_alveo"], help = "Target shell type")
 parser.add_argument('--freq', type = float, default = 200.0, help = 'Frequency in MHz')
 parser.add_argument('--max-freq', type = float, default = 300.0, help = 'Maximum device frequency in MHz')
-parser.add_argument('--target-fps', default = 20000, type = float, help = 'Target fps when target is accuracy')
+parser.add_argument('--target-fps', default = 6000, type = float, help = 'Target fps when target is accuracy')
 
 def train(num_episode, agent, env, output, debug=False):
     # best record
@@ -90,6 +86,8 @@ def train(num_episode, agent, env, output, debug=False):
     episode_reward = 0.
     observation = None
     T = []  # trajectory
+
+    text_writer.write('# episode,reward,acc,fps,avg utilization,policy\n')
     while episode < num_episode:  # counting based on episode
         # reset if it is the start of episode
         if observation is None:
@@ -117,11 +115,9 @@ def train(num_episode, agent, env, output, debug=False):
         episode_steps += 1
         episode_reward += reward
         observation = deepcopy(observation2)
+        
 
         if done:  # end of episode
-            text_writer.write('#{}: episode_reward:{:.4f} acc: {:.4f}, fps: {:.4f}\n'.format(episode, episode_reward,
-                                                                                         info['accuracy'],
-                                                                                         info['fps']))
             final_reward = T[-1][0]
             # agent observe and update policy
             for i, (r_t, s_t, s_t1, a_t, done) in enumerate(T):
@@ -136,6 +132,8 @@ def train(num_episode, agent, env, output, debug=False):
                 0., False
             )
 
+            text_writer.write('{},{},{},{},{},{}\n'.format(episode, episode_reward, info['accuracy'], info['fps'], info['avg_util'], info['strategy']))
+            
             # reset
             observation = None
             episode_steps = 0
@@ -146,31 +144,18 @@ def train(num_episode, agent, env, output, debug=False):
             if final_reward > best_reward:
                 best_reward = final_reward
                 best_policy = env.strategy
-
-            value_loss = agent.get_value_loss()
-            policy_loss = agent.get_policy_loss()
-            delta = agent.get_delta()
-            tfwriter.add_scalar('reward/last', final_reward, episode)
-            tfwriter.add_scalar('reward/best', best_reward, episode)
-            tfwriter.add_scalar('info/accuracy', info['accuracy'], episode)
-            tfwriter.add_text('info/best_policy', str(best_policy), episode)
-            tfwriter.add_text('info/current_policy', str(env.strategy), episode)
-            tfwriter.add_scalar('value_loss', value_loss, episode)
-            tfwriter.add_scalar('policy_loss', policy_loss, episode)
-            tfwriter.add_scalar('delta', delta, episode)
-
-            text_writer.write('best reward: {}\n'.format(best_reward))
-            text_writer.write('best policy: {}\n'.format(best_policy))
+        
             text_writer.flush()
 
     text_writer.close()
+    agent.eval()
+    agent.save(output)
     return best_policy, best_reward
 
 args = parser.parse_args()
 args.fpga_part = part_map[args.board]
 
-tfwriter = SummaryWriter(logdir=args.output)
-text_writer = open(os.path.join(args.output, 'log.txt'), 'w')
+text_writer = open(os.path.join(args.output, 'log.csv'), 'w')
 print('==> Output path: {}...'.format(args.output))
 
 # set seed to reproduce
@@ -180,7 +165,7 @@ if args.device == 'GPU' and torch.cuda.is_available():
     torch.cuda.manual_seed_all(args.seed)
 
 # create environment
-env = ModelEnv(args, get_model_config(args.model_name, args.custom_model_name, args.dataset))
+env = ModelEnv(args, get_model_config(args.model_name, args.dataset))
 
 nb_actions = env.action_space.shape[-1]
 nb_states = env.observation_space.shape[-1]
@@ -189,6 +174,6 @@ nb_states = env.observation_space.shape[-1]
 agent = DDPG(nb_states, nb_actions, args)
 
 # train agent
-best_policy, best_reward = train(args.train_episode, agent, env, args.output)
+best_policy, best_reward = train(args.num_episodes, agent, env, args.output)
 print('best_reward: ', best_reward)
 print('best_policy: ', best_policy)

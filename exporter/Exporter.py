@@ -1,23 +1,34 @@
-from matplotlib.style import available
+from ast import mod
+from operator import contains
 import torch
-import torch
-import numpy as np
-import json
 import time
+import finn.builder.build_dataflow as build
+import finn.builder.build_dataflow_config as build_cfg
+from finn.builder.build_dataflow_config import VerificationStepType
+from finn.builder.build_dataflow_steps import verify_step
+import onnx
+import torch
+import json
+import numpy as np
+import os
+import shutil
+import warnings
 from copy import deepcopy
-
+from distutils.dir_util import copy_tree
 from qonnx.core.modelwrapper import ModelWrapper
-from qonnx.custom_op.registry import getCustomOp
+from qonnx.transformation.general import SortGraph
 from qonnx.transformation.merge_onnx_models import MergeONNXModels
 from qonnx.transformation.insert_topk import InsertTopK
 from qonnx.core.datatype import DataType
+from qonnx.custom_op.registry import getCustomOp
+from qonnx.transformation.bipolar_to_xnor import ConvertBipolarMatMulToXnorPopcount
 from qonnx.transformation.fold_constants import FoldConstants
 from qonnx.transformation.general import (
-    ApplyConfig,
-    GiveReadableTensorNames,
-    GiveUniqueNodeNames,
-    RemoveStaticGraphInputs,
-    RemoveUnusedTensors,
+	ApplyConfig,
+	GiveReadableTensorNames,
+	GiveUniqueNodeNames,
+	RemoveStaticGraphInputs,
+	RemoveUnusedTensors,
 )
 from qonnx.transformation.infer_data_layouts import InferDataLayouts
 from qonnx.transformation.infer_datatypes import InferDataTypes
@@ -27,68 +38,107 @@ from qonnx.transformation.make_input_chanlast import MakeInputChannelsLast
 from qonnx.util.cleanup import cleanup as qonnx_cleanup
 from qonnx.util.cleanup import cleanup_model
 from qonnx.util.config import extract_model_config_to_json
+from shutil import copy
 
+import finn.transformation.fpgadataflow.convert_to_hw_layers as to_hw
 import finn.transformation.streamline.absorb as absorb
-
+from finn.analysis.fpgadataflow.dataflow_performance import dataflow_performance
+from finn.analysis.fpgadataflow.exp_cycles_per_layer import exp_cycles_per_layer
+from finn.analysis.fpgadataflow.hls_synth_res_estimation import hls_synth_res_estimation
+from finn.analysis.fpgadataflow.op_and_param_counts import (
+	aggregate_dict_keys,
+	op_and_param_counts,
+)
+from finn.analysis.fpgadataflow.res_estimation import (
+	res_estimation,
+	res_estimation_complete,
+)
+from finn.builder.build_dataflow_config import (
+	DataflowBuildConfig,
+	DataflowOutputType,
+	ShellFlowType,
+	VerificationStepType,
+)
+from finn.core.onnx_exec import execute_onnx
+from finn.core.rtlsim_exec import rtlsim_exec
+from finn.core.throughput_test import throughput_test_rtlsim
+from finn.transformation.fpgadataflow.annotate_cycles import AnnotateCycles
+from finn.transformation.fpgadataflow.compile_cppsim import CompileCppSim
+from finn.transformation.fpgadataflow.create_dataflow_partition import (
+	CreateDataflowPartition,
+)
+from finn.transformation.fpgadataflow.create_stitched_ip import CreateStitchedIP
+from finn.transformation.fpgadataflow.derive_characteristic import (
+	DeriveCharacteristic,
+	DeriveFIFOSizes,
+)
+from finn.transformation.fpgadataflow.hlssynth_ip import HLSSynthIP
+from finn.transformation.fpgadataflow.insert_dwc import InsertDWC
+from finn.transformation.fpgadataflow.insert_fifo import InsertFIFO
+from finn.transformation.fpgadataflow.make_pynq_driver import MakePYNQDriver
+from finn.transformation.fpgadataflow.make_zynq_proj import ZynqBuild
+from finn.transformation.fpgadataflow.minimize_accumulator_width import (
+	MinimizeAccumulatorWidth,
+)
+from finn.transformation.fpgadataflow.minimize_weight_bit_width import (
+	MinimizeWeightBitWidth,
+)
+from finn.transformation.fpgadataflow.prepare_cppsim import PrepareCppSim
+from finn.transformation.fpgadataflow.prepare_ip import PrepareIP
+from finn.transformation.fpgadataflow.prepare_rtlsim import PrepareRTLSim
+from finn.transformation.fpgadataflow.replace_verilog_relpaths import (
+	ReplaceVerilogRelPaths,
+)
+from finn.transformation.fpgadataflow.set_exec_mode import SetExecMode
+from finn.transformation.fpgadataflow.set_fifo_depths import (
+	InsertAndSetFIFODepths,
+	RemoveShallowFIFOs,
+	SplitLargeFIFOs,
+)
+from finn.transformation.fpgadataflow.set_folding import SetFolding
+from finn.transformation.fpgadataflow.specialize_layers import SpecializeLayers
+from finn.transformation.fpgadataflow.synth_ooc import SynthOutOfContext
+from finn.transformation.fpgadataflow.vitis_build import VitisBuild
 from finn.transformation.move_reshape import RemoveCNVtoFCFlatten
 from finn.transformation.qonnx.convert_qonnx_to_finn import ConvertQONNXtoFINN
 from finn.transformation.qonnx.quant_act_to_multithreshold import (
-    default_filter_function_generator,
+	default_filter_function_generator,
 )
-from finn.transformation.fpgadataflow.create_dataflow_partition import (
-    CreateDataflowPartition,
+from finn.transformation.streamline import Streamline
+from finn.transformation.streamline.reorder import MakeMaxPoolNHWC
+from finn.util.basic import (
+	get_rtlsim_trace_depth,
+	pyverilate_get_liveness_threshold_cycles,
 )
+from finn.util.pyverilator import verilator_fifosim
+from finn.util.test import execute_parent
 
+from finn.util.visualization import showInNetron
 from finn.util.pytorch import ToTensor
 from brevitas.onnx import export_qonnx
-
 
 from finn.transformation.fpgadataflow import convert_to_hw_layers as convert
 from qonnx.transformation.lower_convs_to_matmul import LowerConvsToMatMul
 from finn.transformation.streamline.round_thresholds import RoundAndClipThresholds
-from finn.transformation.fpgadataflow.set_folding import SetFolding
-from finn.transformation.fpgadataflow.specialize_layers import SpecializeLayers
-from finn.transformation.fpgadataflow.minimize_accumulator_width import (
-    MinimizeAccumulatorWidth,
-)
-from finn.transformation.fpgadataflow.minimize_weight_bit_width import (
-    MinimizeWeightBitWidth,
-)
-from finn.analysis.fpgadataflow.res_estimation import (
-    res_estimation,
-    res_estimation_complete,
-)
-from finn.transformation.fpgadataflow.set_fifo_depths import (
-    InsertAndSetFIFODepths,
-    RemoveShallowFIFOs,
-    SplitLargeFIFOs,
-)
-
-from finn.transformation.fpgadataflow.insert_dwc import InsertDWC
-from finn.transformation.fpgadataflow.insert_fifo import InsertFIFO
 
 from qonnx.transformation.general import ConvertSubToAdd, ConvertDivToMul
 import finn.transformation.streamline.collapse_repeated as collapse
 import finn.transformation.streamline.reorder as reorder
-from finn.analysis.fpgadataflow.op_and_param_counts import aggregate_dict_keys
-from finn.builder.build_dataflow_config import LargeFIFOMemStyle
-from samo.model import network
-from train.exporter.utils import (
-	isFeasible,
-	set_defaults,
-	folding,
-	estimate_resources
-)
 
 from samo.backend.finn import parser
-from samo.backend.finn.export import export
+from samo.backend.finn import export as exporter
 from samo.optimiser.annealing import SimulatedAnnealing
 
-platform_path = './platforms'
-platform_files = {}
-platform_files['U250'] = f'{platform_path}/u250.json'
+platform_files_path = 'samo/platforms'
+platform_files = {
+	"U250" : f'{platform_files_path}/u250_4slr.json'
+}
 
 def tidy_up(model):
+	"""Run the tidy-up step on given model. This includes shape and datatype
+	inference, constant folding, and giving nodes and tensors better names.
+	"""
+
 	model = model.transform(InferShapes())
 	model = model.transform(FoldConstants())
 	model = model.transform(GiveUniqueNodeNames())
@@ -98,7 +148,7 @@ def tidy_up(model):
 
 	return model
 
-def preprocessing(model):
+def preprocessing(model: ModelWrapper, cfg: build.DataflowBuildConfig):
 	input_shape = model.get_tensor_shape(model.graph.input[0].name)
 	preproc = ToTensor()
 	export_qonnx(preproc, torch.randn(input_shape), "preproc.onnx", opset_version = 11)
@@ -110,134 +160,21 @@ def preprocessing(model):
 	global_inp_name = model.graph.input[0].name
 	model.set_tensor_datatype(global_inp_name, DataType["UINT8"])
 	model = tidy_up(model)
+
+	model = model.transform(RoundAndClipThresholds())
 	return model
 
-def postprocessing(model):
+def postprocessing(model: ModelWrapper, cfg: build.DataflowBuildConfig):
 	model = model.transform(InsertTopK(k=1))
 	model = tidy_up(model)
+	model = model.transform(RoundAndClipThresholds())
 	return model
 
-def make_input_channels_last(model):
+def make_input_channels_last(model: ModelWrapper, cfg: build.DataflowBuildConfig):
 	model = model.transform(MakeInputChannelsLast())
 	return model
 
-def qonnx_to_finn(model):
-	q_count = 0
-	for op_type in ["BinaryQuant", "Quant", "Trunc"]:
-		q_count += len(model.get_nodes_by_op_type(op_type))
-	if q_count == 0:
-		return model
-	
-	model = cleanup_model(model)
-	model = model.transform(
-		ConvertQONNXtoFINN(
-			filter_function = default_filter_function_generator(
-				max_multithreshold_bit_width = 8
-			)
-		)
-	)
-
-	return model
-
-def create_dataflow_partition(model):
-	parent_model = model.transform(
-		CreateDataflowPartition()
-	)
-
-	sdp_nodes = parent_model.get_nodes_by_op_type("StreamingDataflowPartition")
-	sdp_node = sdp_nodes[0]
-	sdp_node = getCustomOp(sdp_node)
-	dataflow_model_filename = sdp_node.get_nodeattr("model")
-	model = ModelWrapper(dataflow_model_filename)
-
-	return model
-
-def specialize_layers(model, fpga_part):
-	model = model.transform(SpecializeLayers(fpga_part))
-	model = model.transform(InferShapes())
-	model = model.transform(InferDataTypes())
-	
-	return model
-
-def set_folding(model, board):
-	model = model.transform(GiveUniqueNodeNames())
-	model = model.transform(GiveReadableTensorNames())
-
-	set_defaults(model)
-	f = open(platform_files[board], 'r')
-	available_resources = json.load(f)['resources']
-	
-	model, max_cycles, avg_util, max_util, feasible = folding(model, available_resources)
-
-	if not feasible:
-		return model, 1000000, avg_util, max_util
-	else:
-		hw_attrs = [
-		"PE",
-		"SIMD",
-		"parallel_window",
-		"ram_style",
-		"resType",
-		"mem_mode",
-		"runtime_writeable_weights",
-		"depth_trigger_uram",
-		"depth_trigger_bram",
-		"inFIFODepths",
-		"outFIFODepths"
-		]
-
-		extract_model_config_to_json(model, "auto_folding_config.json", hw_attrs)
-		return model, max_cycles, avg_util, max_util
-
-def apply_folding_config(model):
-	model = model.transform(GiveUniqueNodeNames())
-	model = model.transform(ApplyConfig("auto_folding_config.json"))
-
-	return model
-
-def minimize_bit_width(model):
-	model = model.transform(MinimizeWeightBitWidth())
-	model = model.transform(MinimizeAccumulatorWidth())
-	model = model.transform(InferDataTypes())
-
-	return model
-
-def set_fifo_depths(model):
-	extw_optypes = ["MVAU_hls", "MVAU_rtl", "VVAU_hls", "VVAU_rtl"]
-
-	model = model.transform(GiveUniqueNodeNames())
-	model = model.transform(GiveReadableTensorNames())
-
-	for node in model.graph.node:
-		op_type = node.op_type
-
-		node = getCustomOp(node)
-		ifd = node.get_nodeattr("inFIFODepths")
-		ofd = node.get_nodeattr("outFIFODepths")
-
-		for i in range(len(ifd)):
-			ifd[i] = np.prod(node.get_folded_input_shape(i)[:-1])
-			
-		for o in range(len(ofd)):
-			ofd[o] = np.prod(node.get_folded_output_shape(o)[:-1])
-			
-		node.set_nodeattr("inFIFODepths", ifd)
-		node.set_nodeattr("outFIFODepths", ofd)
-
-	model = model.transform(InsertDWC())
-	model = model.transform(InsertFIFO(create_shallow_fifos = True))
-		
-	model = model.transform(GiveUniqueNodeNames())
-	model = model.transform(GiveReadableTensorNames())
-
-	return model
-
-def resource_estimates(model):
-	layer_resources = model.analysis(res_estimation)
-	layer_resources["total"] = aggregate_dict_keys(layer_resources)
-	return layer_resources["total"]
-
-def streamline_lenet(model):
+def streamline_lenet(model: ModelWrapper, cfg: build.DataflowBuildConfig):
 	model = model.transform(ConvertSubToAdd())
 	model = model.transform(ConvertDivToMul())
 	model = model.transform(absorb.AbsorbSignBiasIntoMultiThreshold())
@@ -256,7 +193,7 @@ def streamline_lenet(model):
 
 	return model
 
-def streamline_resnet(model):
+def streamline_resnet(model: ModelWrapper, cfg: build.DataflowBuildConfig):
 	model = model.transform(ConvertSubToAdd())
 	model = model.transform(ConvertDivToMul())
 	model = model.transform(collapse.CollapseRepeatedMul())
@@ -286,7 +223,7 @@ def streamline_resnet(model):
 
 	return model
 
-def convert_to_hw_resnet(model):
+def convert_to_hw_resnet(model: ModelWrapper, cfg: build.DataflowBuildConfig):
 	model = model.transform(InferDataLayouts())
 	model = model.transform(convert.InferGlobalAccPoolLayer())
 	model = model.transform(convert.InferPool())
@@ -296,6 +233,7 @@ def convert_to_hw_resnet(model):
 	model = model.transform(LowerConvsToMatMul())
 	model = model.transform(convert.InferChannelwiseLinearLayer())
 	model = model.transform(convert.InferConvInpGen())
+	model = model.transform(RoundAndClipThresholds())
 	model = model.transform(convert.InferQuantizedMatrixVectorActivation())
 	model = model.transform(convert.InferBinaryMatrixVectorActivation())
 
@@ -322,13 +260,16 @@ def convert_to_hw_resnet(model):
 	model = model.transform(convert.InferAddStreamsLayer())
 	model = model.transform(convert.InferDuplicateStreamsLayer())
 
+	model = model.transform(RoundAndClipThresholds())
+
 	return model
 
-def convert_to_hw_lenet(model):
+def convert_to_hw_lenet(model: ModelWrapper, cfg: build.DataflowBuildConfig):
 	model = model.transform(InferDataLayouts())
 	model = model.transform(convert.InferPool())
 	model = model.transform(LowerConvsToMatMul())
 	model = model.transform(convert.InferConvInpGen())
+	model = model.transform(RoundAndClipThresholds())
 	model = model.transform(convert.InferQuantizedMatrixVectorActivation())
 	model = model.transform(convert.InferBinaryMatrixVectorActivation())
 	model = model.transform(absorb.AbsorbTransposeIntoMultiThreshold())
@@ -343,12 +284,17 @@ def convert_to_hw_lenet(model):
 
 	model = model.transform(InferDataLayouts())
 	model = model.transform(RemoveCNVtoFCFlatten())
-	model = tidy_up(model)
+
 
 	return model
 
-def name_nodes(model):
+def name_nodes(model: ModelWrapper, cfg: build.DataflowBuildConfig):
 	model = model.transform(GiveUniqueNodeNames())
 	model = model.transform(GiveReadableTensorNames())
 
+	return model
+
+def apply_folding_config(model: ModelWrapper, cfg: build.DataflowBuildConfig):
+	model = model.transform(GiveUniqueNodeNames())
+	model = model.transform(ApplyConfig(cfg.folding_config_file))
 	return model

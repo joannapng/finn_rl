@@ -1,0 +1,413 @@
+Using GPU device
+Files already downloaded and verified
+Files already downloaded and verified
+Starting training
+2024-06-05 10:24:46,169 Epoch: [0/200], Step: [0/313], Loss: 2.4578
+2024-06-05 10:24:48,800 Epoch: [0/200], Step: [100/313], Loss: 2.1615
+2024-06-05 10:24:51,433 Epoch: [0/200], Step: [200/313], Loss: 1.9332
+2024-06-05 10:24:54,065 Epoch: [0/200], Step: [300/313], Loss: 1.8369
+------- Validation accuracy -------
+Using GPU device
+Files already downloaded and verified
+Files already downloaded and verified
+Starting training
+2024-06-05 10:25:55,799 Epoch: [0/200], Step: [0/313], Loss: 2.4578
+2024-06-05 10:25:58,437 Epoch: [0/200], Step: [100/313], Loss: 2.1585
+2024-06-05 10:26:01,070 Epoch: [0/200], Step: [200/313], Loss: 2.0398
+2024-06-05 10:26:03,704 Epoch: [0/200], Step: [300/313], Loss: 2.0218
+------- Validation accuracy -------
+2024-06-05 10:26:05,663 Got 2699 / 10000 correct (26.99)
+2024-06-05 10:26:07,096 Epoch: [1/200], Step: [0/313], Loss: 1.8781
+2024-06-05 10:26:09,736 Epoch: [1/200], Step: [100/313], Loss: 1.7551
+2024-06-05 10:26:12,370 Epoch: [1/200], Step: [200/313], Loss: 1.6708
+2024-06-05 10:26:15,005 Epoch: [1/200], Step: [300/313], Loss: 1.6523
+------- Validation accuracy -------
+2024-06-05 10:26:17,003 Got 3786 / 10000 correct (37.86)
+2024-06-05 10:26:18,462 Epoch: [2/200], Step: [0/313], Loss: 1.7679
+2024-06-05 10:26:21,098 Epoch: [2/200], Step: [100/313], Loss: 1.5222
+2024-06-05 10:26:23,736 Epoch: [2/200], Step: [200/313], Loss: 1.6198
+2024-06-05 10:26:26,374 Epoch: [2/200], Step: [300/313], Loss: 1.6242
+------- Validation accuracy -------
+2024-06-05 10:26:28,381 Got 4548 / 10000 correct (45.48)
+2024-06-05 10:26:29,834 Epoch: [3/200], Step: [0/313], Loss: 1.5116
+2024-06-05 10:26:32,472 Epoch: [3/200], Step: [100/313], Loss: 1.3750
+2024-06-05 10:26:35,109 Epoch: [3/200], Step: [200/313], Loss: 1.4873
+2024-06-05 10:26:37,744 Epoch: [3/200], Step: [300/313], Loss: 1.2691
+------- Validation accuracy -------
+2024-06-05 10:26:39,753 Got 5365 / 10000 correct (53.65)
+2024-06-05 10:26:41,194 Epoch: [4/200], Step: [0/313], Loss: 1.3061
+2024-06-05 10:26:43,836 Epoch: [4/200], Step: [100/313], Loss: 1.2516
+2024-06-05 10:26:46,474 Epoch: [4/200], Step: [200/313], Loss: 1.1326
+2024-06-05 10:26:49,114 Epoch: [4/200], Step: [300/313], Loss: 1.0585
+------- Validation accuracy -------
+2024-06-05 10:26:51,126 Got 5698 / 10000 correct (56.98)
+2024-06-05 10:26:52,588 Epoch: [5/200], Step: [0/313], Loss: 1.0548
+2024-06-05 10:26:55,227 Epoch: [5/200], Step: [100/313], Loss: 0.9005
+2024-06-05 10:26:57,868 Epoch: [5/200], Step: [200/313], Loss: 1.0202
+2024-06-05 10:27:00,508 Epoch: [5/200], Step: [300/313], Loss: 1.0776
+------- Validation accuracy -------
+2024-06-05 10:27:02,513 Got 6277 / 10000 correct (62.77)
+2024-06-05 10:27:03,981 Epoch: [6/200], Step: [0/313], Loss: 1.0551
+2024-06-05 10:27:06,622 Epoch: [6/200], Step: [100/313], Loss: 0.9144
+2024-06-05 10:27:09,264 Epoch: [6/200], Step: [200/313], Loss: 0.8047
+2024-06-05 10:27:11,905 Epoch: [6/200], Step: [300/313], Loss: 0.6957
+------- Validation accuracy -------
+2024-06-05 10:27:13,910 Got 6648 / 10000 correct (66.47999999999999)
+2024-06-05 10:27:15,358 Epoch: [7/200], Step: [0/313], Loss: 0.8615
+2024-06-05 10:27:18,000 Epoch: [7/200], Step: [100/313], Loss: 0.9091
+2024-06-05 10:27:20,641 Epoch: [7/200], Step: [200/313], Loss: 0.8051
+2024-06-05 10:27:23,283 Epoch: [7/200], Step: [300/313], Loss: 0.9013
+------- Validation accuracy -------
+2024-06-05 10:27:25,281 Got 5616 / 10000 correct (56.16)
+2024-06-05 10:27:26,723 Epoch: [8/200], Step: [0/313], Loss: 0.8639
+2024-06-05 10:27:29,368 Epoch: [8/200], Step: [100/313], Loss: 0.6950
+2024-06-05 10:27:32,013 Epoch: [8/200], Step: [200/313], Loss: 0.6956
+2024-06-05 10:27:34,655 Epoch: [8/200], Step: [300/313], Loss: 0.6509
+------- Validation accuracy -------
+2024-06-05 10:27:36,653 Got 7323 / 10000 correct (73.22999999999999)
+2024-06-05 10:27:38,118 Epoch: [9/200], Step: [0/313], Loss: 0.5362
+2024-06-05 10:27:40,762 Epoch: [9/200], Step: [100/313], Loss: 0.5802
+2024-06-05 10:27:43,404 Epoch: [9/200], Step: [200/313], Loss: 0.6791
+2024-06-05 10:27:46,049 Epoch: [9/200], Step: [300/313], Loss: 0.6006
+------- Validation accuracy -------
+2024-06-05 10:27:48,062 Got 6950 / 10000 correct (69.5)
+2024-06-05 10:27:49,507 Epoch: [10/200], Step: [0/313], Loss: 0.5466
+2024-06-05 10:27:52,153 Epoch: [10/200], Step: [100/313], Loss: 0.4849
+2024-06-05 10:27:54,799 Epoch: [10/200], Step: [200/313], Loss: 0.6319
+2024-06-05 10:27:57,444 Epoch: [10/200], Step: [300/313], Loss: 0.5544
+------- Validation accuracy -------
+2024-06-05 10:27:59,457 Got 7361 / 10000 correct (73.61)
+2024-06-05 10:28:00,919 Epoch: [11/200], Step: [0/313], Loss: 0.5343
+2024-06-05 10:28:03,566 Epoch: [11/200], Step: [100/313], Loss: 0.5723
+2024-06-05 10:28:06,212 Epoch: [11/200], Step: [200/313], Loss: 0.6532
+2024-06-05 10:28:08,856 Epoch: [11/200], Step: [300/313], Loss: 0.5570
+------- Validation accuracy -------
+2024-06-05 10:28:10,864 Got 7576 / 10000 correct (75.76)
+2024-06-05 10:28:12,328 Epoch: [12/200], Step: [0/313], Loss: 0.6521
+2024-06-05 10:28:14,974 Epoch: [12/200], Step: [100/313], Loss: 0.5913
+2024-06-05 10:28:17,620 Epoch: [12/200], Step: [200/313], Loss: 0.5425
+2024-06-05 10:28:20,266 Epoch: [12/200], Step: [300/313], Loss: 0.6446
+------- Validation accuracy -------
+2024-06-05 10:28:22,289 Got 7607 / 10000 correct (76.07000000000001)
+2024-06-05 10:28:23,765 Epoch: [13/200], Step: [0/313], Loss: 0.5463
+2024-06-05 10:28:26,415 Epoch: [13/200], Step: [100/313], Loss: 0.5134
+2024-06-05 10:28:29,063 Epoch: [13/200], Step: [200/313], Loss: 0.4803
+2024-06-05 10:28:31,710 Epoch: [13/200], Step: [300/313], Loss: 0.4561
+------- Validation accuracy -------
+2024-06-05 10:28:33,721 Got 7906 / 10000 correct (79.06)
+2024-06-05 10:28:35,171 Epoch: [14/200], Step: [0/313], Loss: 0.3780
+2024-06-05 10:28:37,821 Epoch: [14/200], Step: [100/313], Loss: 0.5230
+2024-06-05 10:28:40,469 Epoch: [14/200], Step: [200/313], Loss: 0.4543
+2024-06-05 10:28:43,119 Epoch: [14/200], Step: [300/313], Loss: 0.5469
+------- Validation accuracy -------
+2024-06-05 10:28:45,113 Got 7541 / 10000 correct (75.41)
+2024-06-05 10:28:46,571 Epoch: [15/200], Step: [0/313], Loss: 0.7083
+2024-06-05 10:28:49,219 Epoch: [15/200], Step: [100/313], Loss: 0.4294
+2024-06-05 10:28:51,869 Epoch: [15/200], Step: [200/313], Loss: 0.5298
+2024-06-05 10:28:54,521 Epoch: [15/200], Step: [300/313], Loss: 0.3850
+------- Validation accuracy -------
+2024-06-05 10:28:56,541 Got 7896 / 10000 correct (78.96)
+2024-06-05 10:28:58,000 Epoch: [16/200], Step: [0/313], Loss: 0.4920
+2024-06-05 10:29:00,650 Epoch: [16/200], Step: [100/313], Loss: 0.3433
+2024-06-05 10:29:03,304 Epoch: [16/200], Step: [200/313], Loss: 0.4964
+2024-06-05 10:29:05,954 Epoch: [16/200], Step: [300/313], Loss: 0.3342
+------- Validation accuracy -------
+2024-06-05 10:29:07,966 Got 7851 / 10000 correct (78.51)
+2024-06-05 10:29:09,426 Epoch: [17/200], Step: [0/313], Loss: 0.3775
+2024-06-05 10:29:12,082 Epoch: [17/200], Step: [100/313], Loss: 0.6384
+2024-06-05 10:29:14,735 Epoch: [17/200], Step: [200/313], Loss: 0.3996
+2024-06-05 10:29:17,387 Epoch: [17/200], Step: [300/313], Loss: 0.4469
+------- Validation accuracy -------
+2024-06-05 10:29:19,391 Got 7697 / 10000 correct (76.97)
+2024-06-05 10:29:20,850 Epoch: [18/200], Step: [0/313], Loss: 0.4810
+2024-06-05 10:29:23,505 Epoch: [18/200], Step: [100/313], Loss: 0.3102
+2024-06-05 10:29:26,158 Epoch: [18/200], Step: [200/313], Loss: 0.5480
+2024-06-05 10:29:28,811 Epoch: [18/200], Step: [300/313], Loss: 0.3717
+------- Validation accuracy -------
+2024-06-05 10:29:30,824 Got 8051 / 10000 correct (80.51)
+2024-06-05 10:29:32,280 Epoch: [19/200], Step: [0/313], Loss: 0.4814
+2024-06-05 10:29:34,936 Epoch: [19/200], Step: [100/313], Loss: 0.4106
+2024-06-05 10:29:37,588 Epoch: [19/200], Step: [200/313], Loss: 0.5599
+2024-06-05 10:29:40,243 Epoch: [19/200], Step: [300/313], Loss: 0.4476
+------- Validation accuracy -------
+2024-06-05 10:29:42,246 Got 7506 / 10000 correct (75.06)
+2024-06-05 10:29:43,695 Epoch: [20/200], Step: [0/313], Loss: 0.4695
+2024-06-05 10:29:46,349 Epoch: [20/200], Step: [100/313], Loss: 0.4795
+2024-06-05 10:29:49,006 Epoch: [20/200], Step: [200/313], Loss: 0.3132
+2024-06-05 10:29:51,661 Epoch: [20/200], Step: [300/313], Loss: 0.4744
+------- Validation accuracy -------
+2024-06-05 10:29:53,652 Got 7837 / 10000 correct (78.36999999999999)
+2024-06-05 10:29:55,910 Epoch: [21/200], Step: [0/313], Loss: 0.3174
+2024-06-05 10:29:58,568 Epoch: [21/200], Step: [100/313], Loss: 0.3315
+2024-06-05 10:30:01,222 Epoch: [21/200], Step: [200/313], Loss: 0.4583
+2024-06-05 10:30:03,878 Epoch: [21/200], Step: [300/313], Loss: 0.3618
+------- Validation accuracy -------
+2024-06-05 10:30:05,882 Got 8030 / 10000 correct (80.30000000000001)
+2024-06-05 10:30:07,336 Epoch: [22/200], Step: [0/313], Loss: 0.4790
+2024-06-05 10:30:09,994 Epoch: [22/200], Step: [100/313], Loss: 0.6149
+2024-06-05 10:30:12,651 Epoch: [22/200], Step: [200/313], Loss: 0.4175
+2024-06-05 10:30:15,309 Epoch: [22/200], Step: [300/313], Loss: 0.4364
+------- Validation accuracy -------
+2024-06-05 10:30:17,299 Got 7438 / 10000 correct (74.38)
+2024-06-05 10:30:18,750 Epoch: [23/200], Step: [0/313], Loss: 0.3343
+2024-06-05 10:30:21,411 Epoch: [23/200], Step: [100/313], Loss: 0.2832
+2024-06-05 10:30:24,068 Epoch: [23/200], Step: [200/313], Loss: 0.3141
+2024-06-05 10:30:26,726 Epoch: [23/200], Step: [300/313], Loss: 0.4498
+------- Validation accuracy -------
+2024-06-05 10:30:28,758 Got 8053 / 10000 correct (80.53)
+2024-06-05 10:30:30,203 Epoch: [24/200], Step: [0/313], Loss: 0.4101
+2024-06-05 10:30:32,861 Epoch: [24/200], Step: [100/313], Loss: 0.3423
+2024-06-05 10:30:35,522 Epoch: [24/200], Step: [200/313], Loss: 0.4854
+2024-06-05 10:30:38,181 Epoch: [24/200], Step: [300/313], Loss: 0.5692
+------- Validation accuracy -------
+2024-06-05 10:30:40,187 Got 8022 / 10000 correct (80.22)
+2024-06-05 10:30:41,641 Epoch: [25/200], Step: [0/313], Loss: 0.4861
+2024-06-05 10:30:44,297 Epoch: [25/200], Step: [100/313], Loss: 0.2342
+2024-06-05 10:30:46,957 Epoch: [25/200], Step: [200/313], Loss: 0.3442
+2024-06-05 10:30:49,614 Epoch: [25/200], Step: [300/313], Loss: 0.4386
+------- Validation accuracy -------
+2024-06-05 10:30:51,632 Got 7794 / 10000 correct (77.94)
+2024-06-05 10:30:53,085 Epoch: [26/200], Step: [0/313], Loss: 0.4047
+2024-06-05 10:30:55,743 Epoch: [26/200], Step: [100/313], Loss: 0.3118
+2024-06-05 10:30:58,402 Epoch: [26/200], Step: [200/313], Loss: 0.4489
+2024-06-05 10:31:01,061 Epoch: [26/200], Step: [300/313], Loss: 0.3742
+------- Validation accuracy -------
+2024-06-05 10:31:03,062 Got 7773 / 10000 correct (77.73)
+2024-06-05 10:31:04,527 Epoch: [27/200], Step: [0/313], Loss: 0.4986
+2024-06-05 10:31:07,185 Epoch: [27/200], Step: [100/313], Loss: 0.3176
+2024-06-05 10:31:09,846 Epoch: [27/200], Step: [200/313], Loss: 0.4092
+2024-06-05 10:31:12,504 Epoch: [27/200], Step: [300/313], Loss: 0.3721
+------- Validation accuracy -------
+2024-06-05 10:31:14,501 Got 8145 / 10000 correct (81.45)
+2024-06-05 10:31:15,971 Epoch: [28/200], Step: [0/313], Loss: 0.4057
+2024-06-05 10:31:18,641 Epoch: [28/200], Step: [100/313], Loss: 0.3234
+2024-06-05 10:31:21,300 Epoch: [28/200], Step: [200/313], Loss: 0.3153
+2024-06-05 10:31:23,960 Epoch: [28/200], Step: [300/313], Loss: 0.5152
+------- Validation accuracy -------
+2024-06-05 10:31:25,970 Got 7696 / 10000 correct (76.96)
+2024-06-05 10:31:27,441 Epoch: [29/200], Step: [0/313], Loss: 0.4105
+2024-06-05 10:31:30,100 Epoch: [29/200], Step: [100/313], Loss: 0.4093
+2024-06-05 10:31:32,759 Epoch: [29/200], Step: [200/313], Loss: 0.3298
+2024-06-05 10:31:35,419 Epoch: [29/200], Step: [300/313], Loss: 0.4915
+------- Validation accuracy -------
+2024-06-05 10:31:37,430 Got 8070 / 10000 correct (80.7)
+2024-06-05 10:31:38,879 Epoch: [30/200], Step: [0/313], Loss: 0.5491
+2024-06-05 10:31:41,541 Epoch: [30/200], Step: [100/313], Loss: 0.2285
+2024-06-05 10:31:44,198 Epoch: [30/200], Step: [200/313], Loss: 0.2919
+2024-06-05 10:31:46,859 Epoch: [30/200], Step: [300/313], Loss: 0.4753
+------- Validation accuracy -------
+2024-06-05 10:31:48,872 Got 7823 / 10000 correct (78.23)
+2024-06-05 10:31:51,126 Epoch: [31/200], Step: [0/313], Loss: 0.2669
+2024-06-05 10:31:53,784 Epoch: [31/200], Step: [100/313], Loss: 0.4414
+2024-06-05 10:31:56,442 Epoch: [31/200], Step: [200/313], Loss: 0.4501
+2024-06-05 10:31:59,101 Epoch: [31/200], Step: [300/313], Loss: 0.3653
+------- Validation accuracy -------
+2024-06-05 10:32:01,136 Got 7716 / 10000 correct (77.16)
+2024-06-05 10:32:02,606 Epoch: [32/200], Step: [0/313], Loss: 0.4623
+2024-06-05 10:32:05,265 Epoch: [32/200], Step: [100/313], Loss: 0.5723
+2024-06-05 10:32:07,923 Epoch: [32/200], Step: [200/313], Loss: 0.3519
+2024-06-05 10:32:10,584 Epoch: [32/200], Step: [300/313], Loss: 0.3822
+------- Validation accuracy -------
+2024-06-05 10:32:12,600 Got 7678 / 10000 correct (76.78)
+2024-06-05 10:32:14,069 Epoch: [33/200], Step: [0/313], Loss: 0.3339
+2024-06-05 10:32:16,728 Epoch: [33/200], Step: [100/313], Loss: 0.4268
+2024-06-05 10:32:19,387 Epoch: [33/200], Step: [200/313], Loss: 0.3527
+2024-06-05 10:32:22,046 Epoch: [33/200], Step: [300/313], Loss: 0.2738
+------- Validation accuracy -------
+2024-06-05 10:32:24,039 Got 7979 / 10000 correct (79.79)
+2024-06-05 10:32:25,499 Epoch: [34/200], Step: [0/313], Loss: 0.4244
+2024-06-05 10:32:28,160 Epoch: [34/200], Step: [100/313], Loss: 0.3564
+2024-06-05 10:32:30,820 Epoch: [34/200], Step: [200/313], Loss: 0.3931
+2024-06-05 10:32:33,482 Epoch: [34/200], Step: [300/313], Loss: 0.4364
+------- Validation accuracy -------
+2024-06-05 10:32:35,472 Got 8328 / 10000 correct (83.28)
+2024-06-05 10:32:36,926 Epoch: [35/200], Step: [0/313], Loss: 0.2948
+2024-06-05 10:32:39,589 Epoch: [35/200], Step: [100/313], Loss: 0.4552
+2024-06-05 10:32:42,250 Epoch: [35/200], Step: [200/313], Loss: 0.4545
+2024-06-05 10:32:44,912 Epoch: [35/200], Step: [300/313], Loss: 0.3972
+------- Validation accuracy -------
+2024-06-05 10:32:46,934 Got 8296 / 10000 correct (82.96)
+2024-06-05 10:32:48,539 Epoch: [36/200], Step: [0/313], Loss: 0.2924
+2024-06-05 10:32:51,198 Epoch: [36/200], Step: [100/313], Loss: 0.4539
+2024-06-05 10:32:53,858 Epoch: [36/200], Step: [200/313], Loss: 0.3852
+2024-06-05 10:32:56,517 Epoch: [36/200], Step: [300/313], Loss: 0.4790
+------- Validation accuracy -------
+2024-06-05 10:32:58,505 Got 8032 / 10000 correct (80.32000000000001)
+2024-06-05 10:32:59,958 Epoch: [37/200], Step: [0/313], Loss: 0.2890
+2024-06-05 10:33:02,616 Epoch: [37/200], Step: [100/313], Loss: 0.3484
+2024-06-05 10:33:05,275 Epoch: [37/200], Step: [200/313], Loss: 0.4147
+2024-06-05 10:33:07,937 Epoch: [37/200], Step: [300/313], Loss: 0.3564
+------- Validation accuracy -------
+2024-06-05 10:33:09,927 Got 8156 / 10000 correct (81.56)
+2024-06-05 10:33:11,451 Epoch: [38/200], Step: [0/313], Loss: 0.2917
+2024-06-05 10:33:14,112 Epoch: [38/200], Step: [100/313], Loss: 0.3284
+2024-06-05 10:33:16,773 Epoch: [38/200], Step: [200/313], Loss: 0.3281
+2024-06-05 10:33:19,434 Epoch: [38/200], Step: [300/313], Loss: 0.4038
+------- Validation accuracy -------
+2024-06-05 10:33:21,461 Got 7678 / 10000 correct (76.78)
+2024-06-05 10:33:22,919 Epoch: [39/200], Step: [0/313], Loss: 0.3414
+2024-06-05 10:33:25,576 Epoch: [39/200], Step: [100/313], Loss: 0.2540
+2024-06-05 10:33:28,237 Epoch: [39/200], Step: [200/313], Loss: 0.4554
+2024-06-05 10:33:30,896 Epoch: [39/200], Step: [300/313], Loss: 0.2920
+------- Validation accuracy -------
+2024-06-05 10:33:32,923 Got 8151 / 10000 correct (81.51)
+2024-06-05 10:33:34,378 Epoch: [40/200], Step: [0/313], Loss: 0.3350
+2024-06-05 10:33:37,038 Epoch: [40/200], Step: [100/313], Loss: 0.3395
+2024-06-05 10:33:39,700 Epoch: [40/200], Step: [200/313], Loss: 0.3570
+2024-06-05 10:33:42,361 Epoch: [40/200], Step: [300/313], Loss: 0.3628
+------- Validation accuracy -------
+2024-06-05 10:33:44,391 Got 8177 / 10000 correct (81.77)
+2024-06-05 10:33:46,721 Epoch: [41/200], Step: [0/313], Loss: 0.4206
+2024-06-05 10:33:49,381 Epoch: [41/200], Step: [100/313], Loss: 0.3598
+2024-06-05 10:33:52,041 Epoch: [41/200], Step: [200/313], Loss: 0.3499
+2024-06-05 10:33:54,703 Epoch: [41/200], Step: [300/313], Loss: 0.3281
+------- Validation accuracy -------
+2024-06-05 10:33:56,701 Got 8246 / 10000 correct (82.46)
+2024-06-05 10:33:58,179 Epoch: [42/200], Step: [0/313], Loss: 0.3122
+2024-06-05 10:34:00,840 Epoch: [42/200], Step: [100/313], Loss: 0.3527
+2024-06-05 10:34:03,502 Epoch: [42/200], Step: [200/313], Loss: 0.3148
+2024-06-05 10:34:06,165 Epoch: [42/200], Step: [300/313], Loss: 0.4760
+------- Validation accuracy -------
+2024-06-05 10:34:08,162 Got 8349 / 10000 correct (83.49)
+2024-06-05 10:34:09,617 Epoch: [43/200], Step: [0/313], Loss: 0.4201
+2024-06-05 10:34:12,285 Epoch: [43/200], Step: [100/313], Loss: 0.2890
+2024-06-05 10:34:14,945 Epoch: [43/200], Step: [200/313], Loss: 0.2768
+2024-06-05 10:34:17,605 Epoch: [43/200], Step: [300/313], Loss: 0.3478
+------- Validation accuracy -------
+2024-06-05 10:34:19,601 Got 8045 / 10000 correct (80.45)
+2024-06-05 10:34:21,068 Epoch: [44/200], Step: [0/313], Loss: 0.3129
+2024-06-05 10:34:23,729 Epoch: [44/200], Step: [100/313], Loss: 0.2211
+2024-06-05 10:34:26,391 Epoch: [44/200], Step: [200/313], Loss: 0.4458
+2024-06-05 10:34:29,054 Epoch: [44/200], Step: [300/313], Loss: 0.4262
+------- Validation accuracy -------
+2024-06-05 10:34:31,069 Got 7527 / 10000 correct (75.27000000000001)
+2024-06-05 10:34:32,520 Epoch: [45/200], Step: [0/313], Loss: 0.3732
+2024-06-05 10:34:35,179 Epoch: [45/200], Step: [100/313], Loss: 0.2241
+2024-06-05 10:34:37,841 Epoch: [45/200], Step: [200/313], Loss: 0.3884
+2024-06-05 10:34:40,502 Epoch: [45/200], Step: [300/313], Loss: 0.3442
+------- Validation accuracy -------
+2024-06-05 10:34:42,521 Got 7773 / 10000 correct (77.73)
+2024-06-05 10:34:43,988 Epoch: [46/200], Step: [0/313], Loss: 0.3625
+2024-06-05 10:34:46,649 Epoch: [46/200], Step: [100/313], Loss: 0.3422
+2024-06-05 10:34:49,313 Epoch: [46/200], Step: [200/313], Loss: 0.3716
+2024-06-05 10:34:51,975 Epoch: [46/200], Step: [300/313], Loss: 0.3350
+------- Validation accuracy -------
+2024-06-05 10:34:53,968 Got 8413 / 10000 correct (84.13000000000001)
+2024-06-05 10:34:55,421 Epoch: [47/200], Step: [0/313], Loss: 0.2571
+2024-06-05 10:34:58,081 Epoch: [47/200], Step: [100/313], Loss: 0.2963
+2024-06-05 10:35:00,742 Epoch: [47/200], Step: [200/313], Loss: 0.2247
+2024-06-05 10:35:03,404 Epoch: [47/200], Step: [300/313], Loss: 0.3127
+------- Validation accuracy -------
+2024-06-05 10:35:05,405 Got 8052 / 10000 correct (80.52)
+2024-06-05 10:35:06,875 Epoch: [48/200], Step: [0/313], Loss: 0.3603
+2024-06-05 10:35:09,537 Epoch: [48/200], Step: [100/313], Loss: 0.3784
+2024-06-05 10:35:12,199 Epoch: [48/200], Step: [200/313], Loss: 0.4189
+2024-06-05 10:35:14,859 Epoch: [48/200], Step: [300/313], Loss: 0.3673
+------- Validation accuracy -------
+2024-06-05 10:35:16,872 Got 8450 / 10000 correct (84.5)
+2024-06-05 10:35:18,341 Epoch: [49/200], Step: [0/313], Loss: 0.3732
+2024-06-05 10:35:21,000 Epoch: [49/200], Step: [100/313], Loss: 0.3577
+2024-06-05 10:35:23,659 Epoch: [49/200], Step: [200/313], Loss: 0.4251
+2024-06-05 10:35:26,319 Epoch: [49/200], Step: [300/313], Loss: 0.3787
+------- Validation accuracy -------
+2024-06-05 10:35:28,346 Got 8084 / 10000 correct (80.84)
+2024-06-05 10:35:29,846 Epoch: [50/200], Step: [0/313], Loss: 0.2723
+2024-06-05 10:35:32,506 Epoch: [50/200], Step: [100/313], Loss: 0.2584
+2024-06-05 10:35:35,168 Epoch: [50/200], Step: [200/313], Loss: 0.4565
+2024-06-05 10:35:37,829 Epoch: [50/200], Step: [300/313], Loss: 0.2599
+------- Validation accuracy -------
+2024-06-05 10:35:39,826 Got 7376 / 10000 correct (73.76)
+Using GPU device
+Files already downloaded and verified
+Files already downloaded and verified
+Starting training
+2024-06-05 11:06:34,748 Epoch: [0/200], Step: [0/313], Loss: 2.4578
+2024-06-05 11:06:37,378 Epoch: [0/200], Step: [100/313], Loss: 1.9464
+2024-06-05 11:06:40,008 Epoch: [0/200], Step: [200/313], Loss: 1.8681
+2024-06-05 11:06:42,636 Epoch: [0/200], Step: [300/313], Loss: 1.7252
+------- Validation accuracy -------
+2024-06-05 11:06:44,614 Got 3323 / 10000 correct (33.23)
+2024-06-05 11:06:46,026 Epoch: [1/200], Step: [0/313], Loss: 1.5565
+2024-06-05 11:06:48,669 Epoch: [1/200], Step: [100/313], Loss: 1.5919
+2024-06-05 11:06:51,298 Epoch: [1/200], Step: [200/313], Loss: 1.4473
+2024-06-05 11:06:53,926 Epoch: [1/200], Step: [300/313], Loss: 1.5119
+------- Validation accuracy -------
+Using GPU device
+Files already downloaded and verified
+Files already downloaded and verified
+Starting training
+Traceback (most recent call last):
+  File "/srv/homes/ipanagou/thesis/finn/thesis/code/pretrain.py", line 63, in <module>
+    main()
+  File "/srv/homes/ipanagou/thesis/finn/thesis/code/pretrain.py", line 60, in main
+    trainer.train_model()
+  File "/srv/homes/ipanagou/thesis/finn/thesis/code/pretrain/trainer/Trainer.py", line 255, in train_model
+    scores = self.model(x_train)
+  File "/usr/local/lib/python3.10/dist-packages/torch/nn/modules/module.py", line 1194, in _call_impl
+    return forward_call(*input, **kwargs)
+  File "/srv/homes/ipanagou/thesis/finn/thesis/code/pretrain/models/resnet.py", line 103, in forward
+    out = self.linear(out)
+  File "/usr/local/lib/python3.10/dist-packages/torch/nn/modules/module.py", line 1194, in _call_impl
+    return forward_call(*input, **kwargs)
+  File "/usr/local/lib/python3.10/dist-packages/torch/nn/modules/linear.py", line 114, in forward
+    return F.linear(input, self.weight, self.bias)
+RuntimeError: mat1 and mat2 shapes cannot be multiplied (128x8192 and 512x10)
+Using GPU device
+Files already downloaded and verified
+Files already downloaded and verified
+Starting training
+2024-06-05 11:19:09,242 Epoch: [0/200], Step: [0/313], Loss: 2.4578
+2024-06-05 11:19:11,869 Epoch: [0/200], Step: [100/313], Loss: 2.0879
+2024-06-05 11:19:14,491 Epoch: [0/200], Step: [200/313], Loss: 1.9611
+2024-06-05 11:19:17,114 Epoch: [0/200], Step: [300/313], Loss: 1.8381
+------- Validation accuracy -------
+2024-06-05 11:19:18,742 Got 3065 / 10000 correct (30.65)
+2024-06-05 11:19:19,869 Epoch: [1/200], Step: [0/313], Loss: 1.6600
+2024-06-05 11:19:22,496 Epoch: [1/200], Step: [100/313], Loss: 1.5938
+Using GPU device
+Files already downloaded and verified
+Files already downloaded and verified
+Starting training
+2024-06-05 11:29:01,030 Epoch: [0/200], Step: [0/313], Loss: 2.4578
+2024-06-05 11:29:03,656 Epoch: [0/200], Step: [100/313], Loss: 2.1295
+2024-06-05 11:29:06,276 Epoch: [0/200], Step: [200/313], Loss: 1.9525
+2024-06-05 11:29:08,897 Epoch: [0/200], Step: [300/313], Loss: 1.9362
+------- Validation accuracy -------
+2024-06-05 11:29:10,524 Got 3043 / 10000 correct (30.43)
+2024-06-05 11:29:11,679 Epoch: [1/200], Step: [0/313], Loss: 1.7778
+2024-06-05 11:29:14,311 Epoch: [1/200], Step: [100/313], Loss: 1.7004
+2024-06-05 11:29:16,932 Epoch: [1/200], Step: [200/313], Loss: 1.5830
+2024-06-05 11:29:19,554 Epoch: [1/200], Step: [300/313], Loss: 1.6236
+------- Validation accuracy -------
+2024-06-05 11:29:21,220 Got 3912 / 10000 correct (39.12)
+2024-06-05 11:29:22,442 Epoch: [2/200], Step: [0/313], Loss: 1.5682
+Traceback (most recent call last):
+  File "/srv/homes/ipanagou/thesis/finn/thesis/code/pretrain.py", line 63, in <module>
+    main()
+  File "/srv/homes/ipanagou/thesis/finn/thesis/code/pretrain.py", line 60, in main
+    trainer.train_model()
+  File "/srv/homes/ipanagou/thesis/finn/thesis/code/pretrain/trainer/Trainer.py", line 252, in train_model
+    x_train = x_train.to(self.device)
+  File "/usr/local/lib/python3.10/dist-packages/torch/utils/data/_utils/signal_handling.py", line 66, in handler
+    _error_if_any_worker_fails()
+RuntimeError: DataLoader worker (pid 566569) is killed by signal: Terminated. 
+Using GPU device
+Files already downloaded and verified
+Files already downloaded and verified
+Starting training
+Traceback (most recent call last):
+  File "/srv/homes/ipanagou/thesis/finn/thesis/code/pretrain.py", line 63, in <module>
+    main()
+  File "/srv/homes/ipanagou/thesis/finn/thesis/code/pretrain.py", line 60, in main
+    trainer.train_model()
+  File "/srv/homes/ipanagou/thesis/finn/thesis/code/pretrain/trainer/Trainer.py", line 255, in train_model
+    scores = self.model(x_train)
+  File "/usr/local/lib/python3.10/dist-packages/torch/nn/modules/module.py", line 1194, in _call_impl
+    return forward_call(*input, **kwargs)
+  File "/srv/homes/ipanagou/thesis/finn/thesis/code/pretrain/models/resnet.py", line 104, in forward
+    out = self.linear(out)
+  File "/usr/local/lib/python3.10/dist-packages/torch/nn/modules/module.py", line 1194, in _call_impl
+    return forward_call(*input, **kwargs)
+  File "/usr/local/lib/python3.10/dist-packages/torch/nn/modules/linear.py", line 114, in forward
+    return F.linear(input, self.weight, self.bias)
+RuntimeError: mat1 and mat2 shapes cannot be multiplied (128x2048 and 512x10)

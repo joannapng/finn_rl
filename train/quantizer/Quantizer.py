@@ -212,8 +212,6 @@ class Quantizer(object):
         for i in range(num_quant_acts, len(quantizable_idx)):
             model = self.quantize_layer(model, quantizable_idx[i], int(strategy[i]))
 
-        model = DisableLastReturnQuantTensor().apply(model)
-
         model.train(training_state)
         config.IGNORE_MISSING_KEYS = ignore_missing_keys_state
 
@@ -342,17 +340,17 @@ class Quantizer(object):
                         # for output quant, keep it to 8 bits
                         output_quant_identity_map = deepcopy(quant_identity_map)
                         for n in node.users:
-                            if n.op == 'output':
-                                output_quant_identity_map['bit_width'] = 8
+                            if n.op != 'output':
+                                #output_quant_identity_map['bit_width'] = 8
 
-                        output_quant_handler(
-                        model,
-                        node,
-                        rewriters,
-                        is_sign_preserving=isinstance(module, SIGN_PRESERVING_MODULES),
-                        quant_identity_map=output_quant_identity_map,
-                        quant_act_map=quant_act_map,
-                        unsigned_act_tuple=unsigned_act_tuple)
+                                output_quant_handler(
+                                model,
+                                node,
+                                rewriters,
+                                is_sign_preserving=isinstance(module, SIGN_PRESERVING_MODULES),
+                                quant_identity_map=output_quant_identity_map,
+                                quant_act_map=quant_act_map,
+                                unsigned_act_tuple=unsigned_act_tuple)
 
                     if layer_map[type(module)] is not None:
                         quant_module_class, quant_module_kwargs = layer_map[type(module)]

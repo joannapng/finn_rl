@@ -47,6 +47,25 @@ platform_path = './platforms'
 platform_files = {}
 platform_files['U250'] = f'{platform_path}/u250.json'
 
+streamline_functions = {
+    'LeNet5' : streamline_lenet,
+    'resnet18' : streamline_resnet,
+    'resnet34' : streamline_resnet,
+    'resnet50' : streamline_resnet,
+    'resnet100' : streamline_resnet,
+    'resnet152' : streamline_resnet
+}
+
+convert_to_hw_functions = {
+    'LeNet5' : convert_to_hw_lenet,
+    'resnet18' : convert_to_hw_resnet,
+    'resnet34' : convert_to_hw_resnet,
+    'resnet50' : convert_to_hw_resnet,
+    'resnet100' : convert_to_hw_resnet,
+    'resnet152' : convert_to_hw_resnet
+}
+
+
 class LayerTypes(IntEnum):
     LINEAR = 0
     MHA = 1
@@ -229,29 +248,27 @@ class ModelEnv:
         action = self.get_action(action)
         self.last_action = action
         self.strategy.append(self.last_action)
-
         if self.is_final_layer():
             print(self.strategy)
+        
+            fps, avg_util = self.final_action_wall()
+            self.model = self.quantizer.quantize_model(self.model,
+                                            self.strategy,
+                                            self.quantizable_idx,
+                                            self.num_quant_acts)
+            # calibrate model 
+            self.finetuner.model = self.model 
+            self.finetuner.model.to(self.finetuner.device)
+            self.finetuner.calibrate()
+
+            # finetuner model
+            self.finetuner.init_finetuning_optim()
+            self.finetuner.init_loss()
+            self.finetuner.finetune()
+
+            # validate model
+            acc = self.finetuner.validate()
             
-            if self.args.target == 'latency':
-                fps, avg_util, max_util = self.final_action_wall()
-                self.model = self.quantizer.quantize_model(self.model,
-                                                self.strategy,
-                                                self.quantizable_idx,
-                                                self.num_quant_acts)
-                # calibrate model 
-                self.finetuner.model = self.model 
-                self.finetuner.model.to(self.finetuner.device)
-                self.finetuner.calibrate()
-
-                # finetuner model
-                self.finetuner.init_finetuning_optim()
-                self.finetuner.init_loss()
-                self.finetuner.finetune()
-
-                # validate model
-                acc = self.finetuner.validate()
-                
             reward = self.reward(acc)
 
             if reward > self.best_reward:
@@ -259,7 +276,7 @@ class ModelEnv:
             
             obs = self.layer_embedding[self.cur_ind, :].copy()
             done = True
-            info = {'accuracy' : acc, 'fps' : fps, 'avg_util' : avg_util}
+            info = {'accuracy' : acc, 'fps' : fps, 'avg_util' : avg_util, 'strategy' : self.strategy}
             return obs, reward, done, info 
         
         reward = 0 
@@ -271,11 +288,11 @@ class ModelEnv:
         
         done = False
         obs = self.layer_embedding[self.cur_ind, :].copy()
-        info = {'accuracy' : 0.0, 'fps' : 0.0, 'avg_util' : 0.0}
+        info = {'accuracy' : 0.0, 'fps' : 0.0, 'avg_util' : 0.0, 'strategy' : self.strategy}
         return obs, reward, done, info
     
     def reward(self, acc):
-        return (acc - self.orig_acc) * 0.1
+        return acc * 100
         
     def get_action(self, action):
         action = float(action)
@@ -302,14 +319,17 @@ class ModelEnv:
             bo.export_qonnx(model_for_measure, ref_input, export_path = 'model.onnx', keep_initializers_as_inputs = False, opset_version = 11, verbose = False)
         
             # Transformations
+            streamline_function = streamline_functions[self.args.model_name]
+            convert_to_hw_function = convert_to_hw_functions[self.args.model_name]
+
             model = ModelWrapper('model.onnx')
             model = preprocessing(model)
             model = postprocessing(model)
             model = make_input_channels_last(model)
             model = tidy_up(model)
             model = qonnx_to_finn(model)
-            model = streamline_resnet(model)
-            model = convert_to_hw_resnet(model)
+            model = streamline_function(model)
+            model = convert_to_hw_function(model)
             model = create_dataflow_partition(model)
             model = specialize_layers(model, self.args.fpga_part)
             model, cycles, avg_util, max_util = set_folding(model, self.args.board)
@@ -325,16 +345,25 @@ class ModelEnv:
                     print(f'Managed to achieve {self.args.target_fps} fps using freq = {freq} MHz. Consider changing target frequency')
                 
                 print(f'Target fps not achieved (achieved fps: {fps})')
-                # reduce bitwidth in the hopes that maximum fps is achieved
-                idx, bit = max(enumerate(self.strategy), key = lambda x : x[1])
-                if bit > self.min_bit and bit > self.bound_list[idx][0]:
-                    self.strategy[idx] -= 1
+                
+                # reduce bitwidth in the hopes that maximum fps is achieved, start from the back
+                # where the layers typically have more neurons
+                reduced = False
+                for idx in range(len(self.strategy) - 1, -1, -1):
+                    bit = self.strategy[idx]
+                    if bit > self.min_bit and bit > self.bound_list[idx][0]:
+                        self.strategy[idx] -= 1
+                        reduced = True
+                        break
+                
+                if not reduced:
+                    # not another opportunity to minimize bit width
+                    break
 
-        return fps, avg_util, max_util
+        return fps, avg_util
     
     def maximum_fps(self):
         strategy = [self.bound_list[i][0] for i in range(len(self.quantizable_idx))]
-        print(strategy)
         model_for_measure = copy.deepcopy(self.model)
         model_for_measure = self.quantizer.quantize_model(model_for_measure,
                                                         strategy,
@@ -347,22 +376,25 @@ class ModelEnv:
         bo.export_qonnx(model_for_measure, ref_input, export_path = 'model.onnx', keep_initializers_as_inputs = False, opset_version = 11, verbose = False)
     
         # Transformations
+        streamline_function = streamline_functions[self.args.model_name]
+        convert_to_hw_function = convert_to_hw_functions[self.args.model_name]
+        
         model = ModelWrapper('model.onnx')
         model = preprocessing(model)
         model = postprocessing(model)
         model = make_input_channels_last(model)
         model = tidy_up(model)
         model = qonnx_to_finn(model)
-        model = streamline_resnet(model)
-        model = convert_to_hw_resnet(model)
+        model.save("qonnx_finn.onnx")
+        model = streamline_function(model)
+        model = convert_to_hw_function(model)
         model = create_dataflow_partition(model)
         model = specialize_layers(model, self.args.fpga_part)
-        model, cycles, avg_util, max_util = set_folding(model, self.args.board)
+        model, cycles, _, _ = set_folding(model, self.args.board)
         fps = self.args.freq * 10**6 / cycles
 
         print(f'=> Maximum achievable fps at {self.args.freq} MHz: {fps} fps')
         
         if fps < self.args.target_fps:
             print(f'=> Target fps not achievable, changing target fps from {self.args.target_fps} to {fps}')
-        
-        self.args.target_fps = fps
+            self.args.target_fps = fps
