@@ -1,3 +1,5 @@
+import numpy as np
+import random
 import torch
 import torchvision
 import torch.nn as nn
@@ -30,6 +32,7 @@ class Finetuner(object):
 	def __init__(self, args, model_config):
 		self.args = args
 		
+		# set seed to reproduce
 		# Initialize device
 		self.device = None
 		self.init_device()
@@ -115,29 +118,44 @@ class Finetuner(object):
 		calib_length = int(args.calib_subset * total_length)
 
 		train_length = total_length - calib_length
+		
+		g = torch.Generator()
+		g.manual_seed(self.args.seed)
 
 		self.train_set, self.calib_set = random_split(
 			self.train_set, 
-			[train_length, calib_length]
+			[train_length, calib_length],
+			generator=g
 		)
 
 		self.train_set, _ = random_split(self.train_set, 
 										 [int(train_length * self.args.finetuning_subset), 
-										  int(train_length - train_length * self.args.finetuning_subset)])
+										  int(train_length - train_length * self.args.finetuning_subset)],
+										  generator=g)
+
+		def seed_worker(worker_id):
+			worker_seed = self.args.seed
+			np.random.seed(worker_seed)
+			random.seed(worker_seed)
+
 
 		self.train_loader = DataLoader(self.train_set,
 									   batch_size = self.batch_size_finetuning,
 									   num_workers = self.args.num_workers,
-									   shuffle = True)
+									   worker_init_fn=seed_worker,
+									   generator = g)
 		
 		self.calib_loader = DataLoader(self.calib_set, 
 									   batch_size = self.batch_size_finetuning,
 									   num_workers = self.args.num_workers,
-									   shuffle = True)
+									   worker_init_fn=seed_worker,
+									   generator = g)
 			 
 		self.test_loader = DataLoader(self.test_set,
 									  batch_size = self.batch_size_testing,
-									  num_workers = self.args.num_workers)
+									  num_workers = self.args.num_workers,
+									  worker_init_fn=seed_worker,
+									  generator = g)
 		
 	def init_model(self):
 		builder = networks[self.args.model_name]

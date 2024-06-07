@@ -3,6 +3,7 @@ import math
 import torch
 import random
 import argparse
+import numpy as np
 from copy import deepcopy
 from agent.ddpg import DDPG
 from train.env import ModelEnv
@@ -153,16 +154,20 @@ def train(num_episode, agent, env, output, debug=False):
     return best_policy, best_reward
 
 args = parser.parse_args()
+# set seed to reproduce
+random.seed(args.seed)
+np.random.seed(args.seed)
+torch.manual_seed(args.seed)
+if torch.cuda.is_available():
+    torch.cuda.manual_seed_all(args.seed)
+torch.backends.cudnn.deterministic = True
+torch.backends.cudnn.benchmark = False
+os.environ['PYTHONHASHSEED'] = str(args.seed)
+
 args.fpga_part = part_map[args.board]
 
 text_writer = open(os.path.join(args.output, 'log.csv'), 'w')
 print('==> Output path: {}...'.format(args.output))
-
-# set seed to reproduce
-random.seed(args.seed)
-torch.manual_seed(args.seed)
-if args.device == 'GPU' and torch.cuda.is_available():
-    torch.cuda.manual_seed_all(args.seed)
 
 # create environment
 env = ModelEnv(args, get_model_config(args.model_name, args.dataset))

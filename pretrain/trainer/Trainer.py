@@ -113,6 +113,7 @@ class Trainer(object):
 		
 		train_set, val_set = random_split(train_set, [1 - args.validation_split, args.validation_split])
 
+
 		self.train_loader = DataLoader(train_set,
 									   batch_size = self.batch_size_training,
 									   num_workers = self.args.num_workers,

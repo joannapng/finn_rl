@@ -287,7 +287,7 @@ def test(agent, env, output):
             
             # export quant model to qonnx
             name = output + '_quant.onnx'
-            bo.export_qonnx(model, ref_input, export_path = name, keep_initializers_as_inputs = False, opset_version=11)
+            bo.export_qonnx(model, ref_input, export_path = name, keep_initializers_as_inputs = True, opset_version=11)
 
             break
 

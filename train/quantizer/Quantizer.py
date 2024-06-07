@@ -17,6 +17,7 @@ from brevitas.graph.base import ModuleToModuleByInstance
 from brevitas.graph.base import ModuleInstanceToModuleInstance
 
 from brevitas.quant.scaled_int import Int8ActPerTensorFloat
+from brevitas.quant.scaled_int import Int8ActPerTensorFloatMinMaxInit
 from brevitas.quant.scaled_int import Int8WeightPerTensorFloat
 from brevitas.quant.scaled_int import Int16Bias
 from brevitas.quant.scaled_int import Int32Bias
@@ -160,7 +161,7 @@ class Quantizer(object):
             'dtype': torch.float32,
             'return_quant_tensor': False}
         
-        quant_act_kwargs = {'act_quant': act_quant, 'return_quant_tensor' : True}
+        quant_act_kwargs = {'act_quant': act_quant, 'return_quant_tensor' : False}
         unsigned_quant_act_kwargs = quant_act_kwargs.copy()
 
         quant_mha_kwargs['attn_output_weights_signed'] = False
@@ -212,6 +213,7 @@ class Quantizer(object):
         for i in range(num_quant_acts, len(quantizable_idx)):
             model = self.quantize_layer(model, quantizable_idx[i], int(strategy[i]))
 
+        model = DisableLastReturnQuantTensor().apply(model)
         model.train(training_state)
         config.IGNORE_MISSING_KEYS = ignore_missing_keys_state
 
@@ -242,10 +244,11 @@ class Quantizer(object):
                         model):
 
         # Input quantizer fixed at 8 bits
-        input_quantizer, input_quantizer_kwargs = self.quantize_kwargs['quant_identity_map']['signed']
-        input_quantizer_kwargs['bit_width'] = 8
-        input_quantizer = (input_quantizer, input_quantizer_kwargs)
-        
+        input_quantizer = (qnn.QuantIdentity, { 'act_quant': Int8ActPerTensorFloat, 
+                                                'return_quant_tensor': False, 
+                                                'bit_width': 8, 
+                                                'scaling_min_val' : 2e-16})
+                                                #'scaling_per_output_channel' : True})
         model = inp_placeholder_handler(model, input_quantizer)
         return model
 
@@ -340,17 +343,18 @@ class Quantizer(object):
                         # for output quant, keep it to 8 bits
                         output_quant_identity_map = deepcopy(quant_identity_map)
                         for n in node.users:
-                            if n.op != 'output':
-                                #output_quant_identity_map['bit_width'] = 8
-
-                                output_quant_handler(
-                                model,
-                                node,
-                                rewriters,
-                                is_sign_preserving=isinstance(module, SIGN_PRESERVING_MODULES),
-                                quant_identity_map=output_quant_identity_map,
-                                quant_act_map=quant_act_map,
-                                unsigned_act_tuple=unsigned_act_tuple)
+                            if n.op == 'output':
+                                output_quant_identity_map = {'signed': (qnn.QuantIdentity, {'act_quant': Int8ActPerTensorFloatMinMaxInit, 'return_quant_tensor': False, 'bit_width': 8, 'min_val' : -128.0, 'max_val' : 127.0}), 
+                                                            'unsigned': (qnn.QuantIdentity, {'act_quant': Int8ActPerTensorFloatMinMaxInit, 'return_quant_tensor': False, 'signed': False, 'bit_width' : 8, 'min_val' : -128.0, 'max_val' : 127.0})
+                                                            }
+                        output_quant_handler(
+                        model,
+                        node,
+                        rewriters,
+                        is_sign_preserving=isinstance(module, SIGN_PRESERVING_MODULES),
+                        quant_identity_map=output_quant_identity_map,
+                        quant_act_map=quant_act_map,
+                        unsigned_act_tuple=unsigned_act_tuple)
 
                     if layer_map[type(module)] is not None:
                         quant_module_class, quant_module_kwargs = layer_map[type(module)]
