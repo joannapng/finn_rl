@@ -227,11 +227,11 @@ class DDPG(object):
         if output is None: return
 
         self.actor.load_state_dict(
-            torch.load('{}/actor.pkl'.format(output))
+            torch.load('{}/actor.pkl'.format(output), map_location=torch.device('cpu'))
         )
 
         self.critic.load_state_dict(
-            torch.load('{}/critic.pkl'.format(output))
+            torch.load('{}/critic.pkl'.format(output), map_location=torch.device('cpu'))
         )
 
     def save_model(self, output):

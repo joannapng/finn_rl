@@ -24,6 +24,11 @@ def set_defaults(model):
 		if "SIMD" in attrs:
 			inst.set_nodeattr("SIMD", 1)
 
+		if "runtime_writeable_weights" in attrs:
+			inst.set_nodeattr("runtime_writeable_weights", 1)
+
+	return model
+
 def estimate_resources(model):
 	model = model.transform(GiveUniqueNodeNames())
 	model = model.transform(GiveReadableTensorNames())
@@ -395,6 +400,7 @@ def folding(model, available_resources):
 		model, feasible = isFeasible(model, available_resources)
 	
 	model = deepcopy(prev_model)
+
 	cycles_per_layer = estimate_cycles(model)
 	max_cycles = max(cycles_per_layer.items(), key = lambda x : x[1])[1]
 	avg_util, _ = avg_utilization(model, available_resources)

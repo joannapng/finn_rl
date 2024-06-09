@@ -15,3 +15,4 @@ checkpoints/*
 logs/*
 logs
 LeNet5/
+resnet18/

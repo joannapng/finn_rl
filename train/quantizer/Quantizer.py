@@ -17,7 +17,7 @@ from brevitas.graph.base import ModuleToModuleByInstance
 from brevitas.graph.base import ModuleInstanceToModuleInstance
 
 from brevitas.quant.scaled_int import Int8ActPerTensorFloat
-from brevitas.quant.scaled_int import Int8ActPerTensorFloatMinMaxInit
+from brevitas.quant.scaled_int import Int8ActPerTensorFloatMinMaxInit, Uint8ActPerTensorFloatMaxInit
 from brevitas.quant.scaled_int import Int8WeightPerTensorFloat
 from brevitas.quant.scaled_int import Int16Bias
 from brevitas.quant.scaled_int import Int32Bias
@@ -27,6 +27,8 @@ from brevitas.graph.standardize import DisableLastReturnQuantTensor
 from brevitas.graph.quantize_impl import SIGN_PRESERVING_MODULES
 
 from train.quantizer.utils import align_input_quant
+from brevitas_examples.bnn_pynq.models.common import CommonActQuant
+from brevitas.core.scaling import ScalingImplType
 
 BIAS_BIT_WIDTH_MAP = {32: Int32Bias, 16: Int16Bias, 8: Int8Bias, None: None}
 UNSIGNED_ACT_TUPLE = (nn.ReLU, nn.ReLU6, nn.Sigmoid, nn.Hardsigmoid)
@@ -95,7 +97,9 @@ class Quantizer(object):
         weight_bit_width_dict = {'bit_width' : weight_bit_width}
         act_bit_width_dict = {'bit_width': act_bit_width}
 
-        bias_quant = BIAS_BIT_WIDTH_MAP[bias_bit_width] if act_bit_width is not None else None
+        self.bias_quant = BIAS_BIT_WIDTH_MAP[bias_bit_width] if bias_bit_width is not None else None
+        bias_quant = None
+        #print(bias_quant)
         weight_quant = Int8WeightPerTensorFloat
         weight_quant = weight_quant.let(**weight_bit_width_dict)
 
@@ -138,7 +142,7 @@ class Quantizer(object):
         quant_wbiol_kwargs = {
             **weight_quant_dict,
             'dtype': torch.float32,
-            'return_quant_tensor': False,
+            'return_quant_tensor': True,
             'bias_quant': bias_quant
         }
 
@@ -159,9 +163,9 @@ class Quantizer(object):
             # since it supports only self-attention
             'packed_in_proj': True,
             'dtype': torch.float32,
-            'return_quant_tensor': False}
+            'return_quant_tensor': True}
         
-        quant_act_kwargs = {'act_quant': act_quant, 'return_quant_tensor' : False}
+        quant_act_kwargs = {'act_quant': act_quant, 'return_quant_tensor' : True}
         unsigned_quant_act_kwargs = quant_act_kwargs.copy()
 
         quant_mha_kwargs['attn_output_weights_signed'] = False
@@ -244,11 +248,13 @@ class Quantizer(object):
                         model):
 
         # Input quantizer fixed at 8 bits
-        input_quantizer = (qnn.QuantIdentity, { 'act_quant': Int8ActPerTensorFloat, 
-                                                'return_quant_tensor': False, 
-                                                'bit_width': 8, 
-                                                'scaling_min_val' : 2e-16})
-                                                #'scaling_per_output_channel' : True})
+        input_quantizer = (qnn.QuantIdentity, {'act_quant' : CommonActQuant,
+                                               'bit_width' : 8,
+                                               'min_val' : -1.0,
+                                               'max_val' : 1.0 - 2.0 ** (-7),
+                                               'narrow_range' : False,
+                                               'scaling_impl_type' : ScalingImplType.CONST,
+                                               'return_quant_tensor' : True})
         model = inp_placeholder_handler(model, input_quantizer)
         return model
 
@@ -344,8 +350,8 @@ class Quantizer(object):
                         output_quant_identity_map = deepcopy(quant_identity_map)
                         for n in node.users:
                             if n.op == 'output':
-                                output_quant_identity_map = {'signed': (qnn.QuantIdentity, {'act_quant': Int8ActPerTensorFloatMinMaxInit, 'return_quant_tensor': False, 'bit_width': 8, 'min_val' : -128.0, 'max_val' : 127.0}), 
-                                                            'unsigned': (qnn.QuantIdentity, {'act_quant': Int8ActPerTensorFloatMinMaxInit, 'return_quant_tensor': False, 'signed': False, 'bit_width' : 8, 'min_val' : -128.0, 'max_val' : 127.0})
+                                output_quant_identity_map = {'signed': (qnn.QuantIdentity, {'act_quant': Int8ActPerTensorFloatMinMaxInit, 'return_quant_tensor': True, 'bit_width': 8, 'min_val' : -128.0, 'max_val' : 127.0}), 
+                                                            'unsigned': (qnn.QuantIdentity, {'act_quant': Int8ActPerTensorFloatMinMaxInit, 'return_quant_tensor': True, 'signed': False, 'bit_width' : 8, 'min_val' : -128.0, 'max_val' : 127.0})
                                                             }
                         output_quant_handler(
                         model,
@@ -361,6 +367,8 @@ class Quantizer(object):
                         quant_module_kwargs['weight_bit_width'] = weight_bit_width
                         
                         if module.bias is not None:
+                            quant_module_kwargs['bias_quant'] = self.bias_quant
+                        else:
                             quant_module_kwargs['bias_quant'] = None
 
                         if not are_inputs_quantized_and_aligned(

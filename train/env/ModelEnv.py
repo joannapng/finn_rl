@@ -370,6 +370,7 @@ class ModelEnv:
                                                         self.quantizable_idx,
                                                         self.num_quant_acts)
         # export model to qonnx
+        model_for_measure.eval()
         img_shape = self.model_config['center_crop_shape']
         device, dtype = next(model_for_measure.parameters()).device, next(model_for_measure.parameters()).dtype
         ref_input = torch.randn(1, self.finetuner.in_channels, img_shape, img_shape, device = device, dtype = dtype)
@@ -385,7 +386,6 @@ class ModelEnv:
         model = make_input_channels_last(model)
         model = tidy_up(model)
         model = qonnx_to_finn(model)
-        model.save("qonnx_finn.onnx")
         model = streamline_function(model)
         model = convert_to_hw_function(model)
         model = create_dataflow_partition(model)

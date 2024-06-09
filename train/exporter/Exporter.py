@@ -95,6 +95,8 @@ def tidy_up(model):
 	model = model.transform(GiveReadableTensorNames())
 	model = model.transform(InferDataTypes())
 	model = model.transform(RemoveStaticGraphInputs())
+	model = model.transform(GiveUniqueNodeNames())
+	model = model.transform(GiveReadableTensorNames())
 
 	return model
 
@@ -163,7 +165,7 @@ def set_folding(model, board):
 	model = model.transform(GiveUniqueNodeNames())
 	model = model.transform(GiveReadableTensorNames())
 
-	set_defaults(model)
+	model = set_defaults(model)
 	f = open(platform_files[board], 'r')
 	available_resources = json.load(f)['resources']
 	
@@ -240,19 +242,29 @@ def resource_estimates(model):
 def streamline_lenet(model):
 	model = model.transform(ConvertSubToAdd())
 	model = model.transform(ConvertDivToMul())
+
+	model = model.transform(absorb.AbsorbMulIntoMultiThreshold())
 	model = model.transform(absorb.AbsorbSignBiasIntoMultiThreshold())
 	model = model.transform(absorb.AbsorbAddIntoMultiThreshold())
+	model = model.transform(collapse.CollapseRepeatedMul())
+	model = model.transform(reorder.MoveScalarMulPastConv())
+	model = model.transform(reorder.MoveScalarMulPastMatMul())
+	model = model.transform(collapse.CollapseRepeatedMul())
 	model = model.transform(absorb.AbsorbMulIntoMultiThreshold())
-	model = model.transform(absorb.AbsorbScalarMulAddIntoTopK())
+	model = model.transform(collapse.CollapseRepeatedMul())
 	model = model.transform(reorder.MoveMulPastMaxPool())
 	model = model.transform(reorder.MoveScalarLinearPastInvariants())
 	model = model.transform(reorder.MoveScalarMulPastConv())
-	model = model.transform(reorder.MoveScalarMulPastMatMul())
 	model = model.transform(absorb.AbsorbMulIntoMultiThreshold())
-	model = model.transform(RoundAndClipThresholds())
+	model = model.transform(reorder.MoveMulPastMaxPool())
+	model = model.transform(reorder.MoveScalarLinearPastInvariants())
+	model = model.transform(collapse.CollapseRepeatedMul())
 
-	model = model.transform(InferDataLayouts())
-	model = model.transform(RemoveUnusedTensors())
+	for i in range(3):
+		model = model.transform(reorder.MoveScalarMulPastMatMul())
+		model = model.transform(absorb.AbsorbMulIntoMultiThreshold())
+
+	model = model.transform(absorb.AbsorbScalarMulAddIntoTopK())
 
 	return model
 

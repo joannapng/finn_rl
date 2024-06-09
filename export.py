@@ -7,7 +7,7 @@ import numpy as np
 from exporter.Exporter import (preprocessing, postprocessing, 
 							   make_input_channels_last, streamline_resnet, 
 							   convert_to_hw_resnet, name_nodes, streamline_lenet,
-							   convert_to_hw_lenet)
+							   convert_to_hw_lenet, qonnx_to_finn)
 
 import finn.builder.build_dataflow as build
 import finn.builder.build_dataflow_config as build_cfg
@@ -71,9 +71,7 @@ def main():
 			postprocessing,
 			make_input_channels_last,
 			"step_tidy_up",
-			name_nodes,
-			"step_qonnx_to_finn",
-			"step_tidy_up",
+			qonnx_to_finn,
 			streamline_function,
 			convert_to_hw_function,
 			"step_create_dataflow_partition",
@@ -96,7 +94,7 @@ def main():
 		generate_outputs = [
 			build_cfg.DataflowOutputType.ESTIMATE_REPORTS,
 			build_cfg.DataflowOutputType.STITCHED_IP,
-			#build_cfg.DataflowOutputType.RTLSIM_PERFORMANCE,
+			build_cfg.DataflowOutputType.RTLSIM_PERFORMANCE,
 			build_cfg.DataflowOutputType.OOC_SYNTH,
 			build_cfg.DataflowOutputType.BITFILE,
 			build_cfg.DataflowOutputType.PYNQ_DRIVER,
@@ -107,7 +105,7 @@ def main():
 			build_cfg.VerificationStepType.TIDY_UP_PYTHON,
 			build_cfg.VerificationStepType.STREAMLINED_PYTHON,
 			build_cfg.VerificationStepType.FOLDED_HLS_CPPSIM,
-			#build_cfg.VerificationStepType.STITCHED_IP_RTLSIM
+			build_cfg.VerificationStepType.STITCHED_IP_RTLSIM
 		]
 	)
 
