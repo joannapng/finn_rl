@@ -9,13 +9,24 @@ from brevitas.graph.utils import get_module
 import importlib_resources as importlib
 
 from train.env import ModelEnv
+from stable_baselines3.common.monitor import Monitor
 from pretrain.utils import get_model_config
 from copy import deepcopy
 from finn.util.basic import part_map
-from agent.ddpg import DDPG
 import random
 import os
 import brevitas.onnx as bo
+from stable_baselines3 import A2C, DDPG, PPO, SAC, TD3
+from copy import deepcopy
+import multiprocessing as mp
+
+rl_algorithms = {
+    'A2C': A2C,
+    'DDPG': DDPG,
+    'PPO': PPO,
+    'SAC': SAC,
+    'TD3': TD3
+}
 
 model_names = ['LeNet5', 'resnet18', 'resnet34', 'resnet50', 'resnet100', 'resnet152']
 
@@ -44,7 +55,7 @@ parser.add_argument('--dataset', default = 'MNIST', choices = ['MNIST', 'CIFAR10
 parser.add_argument('--batch-size-finetuning', default = 64, type = int, help = 'Batch size for finetuning')
 parser.add_argument('--batch-size-testing', default = 64, type = int, help = 'Batch size for testing')
 parser.add_argument('--num-workers', default = 32, type = int, help = 'Num workers')
-parser.add_argument('--calib-subset', default = 0.1, type = float, help = 'Percentage of training dataset for calibration')
+parser.add_argument('--calib-subset', default = 0.5, type = float, help = 'Percentage of training dataset for calibration')
 parser.add_argument('--finetuning-subset', default = 0.5, type = float, help = 'Percentage of dataset to use for finetuning')
 
 ### ----- FINETUNER PARAMETERS ----- ###
@@ -68,27 +79,12 @@ parser.add_argument('--min-bit', type=int, default=1, help = 'Minimum bit width 
 parser.add_argument('--max-bit', type=int, default=8, help = 'Maximum bit width (default: 8)')
 
 ### ----- AGENT ------ ###
-parser.add_argument('--hidden1', default = 300, type = int, help = 'Hidden num of first fully connected layer')
-parser.add_argument('--hidden2', default = 300, type = int, help = 'Hidden num of second fully connected layer')
-parser.add_argument('--lr_c', default = 1e-3, type = float, help = 'Learning rate for actor')
-parser.add_argument('--lr_a', default = 1e-4, type = float, help = 'Learning rate for critic')
-parser.add_argument('--warmup', default = 20, type = float, help = 'Time without training but only filling the replay memory')
-parser.add_argument('--discount', default=1., type=float, help='')
-parser.add_argument('--bsize', default=64, type=int, help='minibatch size')
-parser.add_argument('--rmsize', default=128, type=int, help='memory size for each layer')
-parser.add_argument('--window_length', default=1, type=int, help='')
-parser.add_argument('--tau', default=0.01, type=float, help='moving average for target network')
-parser.add_argument('--init_delta', default=0.5, type=float, help='initial variance of truncated normal distribution')
-parser.add_argument('--delta_decay', default=0.99, type=float, help='delta decay during exploration')
-parser.add_argument('--n_update', default=1, type=int, help='number of rl to update each time')
-parser.add_argument('--output', default='./logs', type=str, help='')
-parser.add_argument('--weights-dir', default = './logs', type = str, help = 'Path to actor and critic weights')
-
-parser.add_argument('--num-episodes', default = 100, type = int, help = 'Number of episodes (passes over the entire network) to train the agent for')
+parser.add_argument('--agent', default = 'TD3', choices = ['A2C', 'DDPG', 'PPO', 'SAC', 'TD3'], help = 'Choose algorithm to train agent')
+parser.add_argument('--noise', default = 0.1, type = float, help = 'Std for added noise in agent')
+parser.add_argument('--num-episodes', default = 500, type = int, help = 'Number of episodes (passes over the entire network) to train the agent for')
 parser.add_argument('--log-every', default = 10, type = int, help = 'How many episodes to wait to log agent')
+parser.add_argument('--output', default='./logs', type=str, help='')
 parser.add_argument('--seed', default = 234, type = int, help = 'Seed to reproduce')
-parser.add_argument('--init_w', default=0.003, type=float, help='')
-parser.add_argument('--epsilon', default=50000, type=int, help='linear decay of exploration policy')
 
 ### --- DESIGN --- ###
 parser.add_argument('--board', default = "U250", help = "Name of target board")
@@ -97,53 +93,8 @@ parser.add_argument('--freq', type = float, default = 200.0, help = 'Frequency i
 parser.add_argument('--max-freq', type = float, default = 300.0, help = 'Maximum device frequency in MHz')
 parser.add_argument('--target-fps', default = 6000, type = float, help = 'Target fps when target is accuracy')
 
-parser.add_argument('--onnx-output', type = str, default = 'model.onnx', help = 'Onnx output name')
-
-def test(agent, env, output):
-    observation = None
-    while True:
-        if observation is None:
-            observation = deepcopy(env.reset())
-        
-        agent.reset(observation)
-        action = agent.select_action(observation, episode = args.warmup + 1)
-
-        observation2, reward, done, info = env.step(action)
-        observation2 = deepcopy(observation2)
-        observation = deepcopy(observation2)
-
-        if done:
-            model = env.finetuner.model
-            model.eval()
-
-            model_config = get_model_config(args.model_name, args.dataset)
-            center_crop_shape = model_config['center_crop_shape']
-            img_shape = center_crop_shape
-            
-            input_tensor_npy = get_example_input(args.dataset)
-            input_tensor_torch = torch.from_numpy(input_tensor_npy).float() / 255.0
-            input_tensor_torch = input_tensor_torch.detach().to(env.finetuner.device)
-            input_tensor_npy = np.transpose(input_tensor_npy, (0, 2, 3, 1)) # N, H, W, C
-            np.save("input.npy", input_tensor_npy)
-
-            output_golden = model.forward(input_tensor_torch).detach().cpu().numpy()
-            output_golden = np.flip(output_golden.flatten().argsort())[:1]
-            np.save("expected_output.npy", output_golden)
-
-            device, dtype = next(model.parameters()).device, next(model.parameters()).dtype
-            ref_input = torch.randn(1, env.finetuner.in_channels, img_shape, img_shape, device = device, dtype = dtype)
-
-            # export original model to onnx
-            orig_model = env.orig_model
-            orig_model.eval()
-            name = output + '.onnx'
-            torch.onnx.export(orig_model, ref_input, name, export_params = False, opset_version=11)
-            
-            # export quant model to qonnx
-            name = output + '_quant.onnx'
-            bo.export_qonnx(model, ref_input, export_path = name, keep_initializers_as_inputs = False, opset_version=11)
-
-            break
+parser.add_argument('--output-dir', type = str, default = 'Model', help = 'Output dir for exported models')
+parser.add_argument('--onnx-output', type = str, default = 'model', help = 'Onnx output name')
 
 args = parser.parse_args()
 args.fpga_part = part_map[args.board]
@@ -155,15 +106,63 @@ if args.device == 'GPU' and torch.cuda.is_available():
     torch.cuda.manual_seed_all(args.seed)
 
 # create environment
-env = ModelEnv(args, get_model_config(args.model_name, args.dataset))
+env = Monitor(
+    ModelEnv(args, get_model_config(args.model_name, args.dataset)))
 
-nb_actions = env.action_space.shape[-1]
-nb_states = env.observation_space.shape[-1]
+n_actions = env.action_space.shape[-1]
+agent = rl_algorithms[args.agent]("MlpPolicy", env, action_noise = None, verbose = 1)
+rl_model = agent.load(f'agents/agent_{args.model_name}')
 
-# create agent
-agent = DDPG(nb_states, nb_actions, args)
-agent.load_weights(args.weights_dir)
-agent.eval()
+done = False
+obs, _ = env.reset()
+while not done:
+    action, _states = rl_model.predict(obs)
+    obs, rewards, done, _, info = env.step(action)
 
-# train agent
-test(agent, env, args.onnx_output)
+model = env.finetuner.model
+model.eval()
+
+model_config = get_model_config(args.model_name, args.dataset)
+center_crop_shape = model_config['center_crop_shape']
+img_shape = center_crop_shape
+
+'''
+#input_tensor_torch, _ = next(iter(env.finetuner.export_loader))
+input_tensor_torch = next(iter(env.finetuner.export_loader))[0][0]
+input_tensor_torch = input_tensor_torch[None, :, :, :]
+input_tensor_npy = input_tensor_torch.cpu().numpy().astype(np.float32)  
+input_tensor_npy = np.transpose(input_tensor_npy, (0, 2, 3, 1)) # N, H, W, C
+input_tensor_torch = input_tensor_torch.detach().to(env.finetuner.device) / 255.0
+np.save("input.npy", input_tensor_npy)
+
+output_golden = model.forward(input_tensor_torch).detach().cpu().numpy()
+output_golden = np.argmax(output_golden, axis = 1)
+np.save("expected_output.npy", output_golden)
+'''
+
+input_tensor_npy = get_example_input(args.dataset)
+input_tensor_torch = torch.from_numpy(input_tensor_npy).float() / 255.0
+input_tensor_torch = input_tensor_torch.detach().to(env.finetuner.device)
+input_tensor_npy = np.transpose(input_tensor_npy, (0, 2, 3, 1)) # N, H, W, C
+np.save("input.npy", input_tensor_npy)
+
+output_golden = model.forward(input_tensor_torch).detach().cpu().numpy()
+print(output_golden)
+output_golden = np.flip(output_golden.flatten().argsort())[:1]
+print(output_golden)
+np.save("expected_output.npy", output_golden)
+
+device, dtype = next(model.parameters()).device, next(model.parameters()).dtype
+ref_input = torch.randn(1, env.finetuner.in_channels, img_shape, img_shape, device = device, dtype = dtype)
+
+# export original model to onnx
+orig_model = env.orig_model
+orig_model.eval()
+output = os.path.join(args.output_dir, args.onnx_output)
+name = output + '.onnx'
+torch.onnx.export(orig_model, ref_input, name, export_params = False, opset_version=11)
+
+# export quant model to qonnx
+name = output + '_quant.onnx'
+bo.export_qonnx(model, ref_input, export_path = name, export_params = True, keep_initializers_as_inputs = False, opset_version=11)
+

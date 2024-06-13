@@ -260,6 +260,9 @@ class Trainer(object):
 					loss.backward()
 					self.training_optimizer.step()
 
+					#if hasattr(self.model, 'clip_weights'):
+					#	self.model.clip_weights(-1, 1)
+
 					if i % self.args.print_every == 0:
 						self.logger.log.info("Epoch: [{}/{}], Step: [{}/{}], Loss: {:.4f}"
 							.format(epoch, self.training_epochs, i, num_steps, loss))

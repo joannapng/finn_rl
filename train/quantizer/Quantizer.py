@@ -207,6 +207,7 @@ class Quantizer(object):
         # quantize activations
         for i in range(num_quant_acts):
             model = self.quantize_act(model, quantizable_idx[i], int(strategy[i]))
+            quantizable_idx = self.update_index(model, quantizable_idx)
 
         # quantize add outputs and handle residuals
         self.quantize_output(model)
@@ -216,6 +217,7 @@ class Quantizer(object):
         # quantize compute layers
         for i in range(num_quant_acts, len(quantizable_idx)):
             model = self.quantize_layer(model, quantizable_idx[i], int(strategy[i]))
+            quantizable_idx = self.update_index(model, quantizable_idx)
 
         model = DisableLastReturnQuantTensor().apply(model)
         model.train(training_state)
@@ -250,12 +252,24 @@ class Quantizer(object):
         # Input quantizer fixed at 8 bits
         input_quantizer = (qnn.QuantIdentity, {'act_quant' : CommonActQuant,
                                                'bit_width' : 8,
-                                               'min_val' : -1.0,
-                                               'max_val' : 1.0 - 2.0 ** (-7),
                                                'narrow_range' : False,
-                                               'scaling_impl_type' : ScalingImplType.CONST,
+                                               'min_value' : -1.0,
+                                               'max_value' : 1.0 - 2**(-7),
                                                'return_quant_tensor' : True})
-        model = inp_placeholder_handler(model, input_quantizer)
+        rewriters = []
+      
+        # insert quantizer after the mul and sub nodes
+        for node in model.graph.nodes:
+            if node.op == 'call_function' and node.name == 'sub':
+                act_quant, kwargs_act_quant = input_quantizer
+                inp_quant = act_quant(**kwargs_act_quant)
+                name = node.name + '_quant'
+                model.add_module(name, inp_quant)
+                rewriters.append(InsertModuleCallAfter(name, node))
+                break
+        for rewriter in rewriters:
+            model = rewriter.apply(model)
+
         return model
 
     def quantize_act(self,
@@ -348,11 +362,29 @@ class Quantizer(object):
                     else:
                         # for output quant, keep it to 8 bits
                         output_quant_identity_map = deepcopy(quant_identity_map)
+                        
+                        '''
                         for n in node.users:
                             if n.op == 'output':
-                                output_quant_identity_map = {'signed': (qnn.QuantIdentity, {'act_quant': Int8ActPerTensorFloatMinMaxInit, 'return_quant_tensor': True, 'bit_width': 8, 'min_val' : -128.0, 'max_val' : 127.0}), 
-                                                            'unsigned': (qnn.QuantIdentity, {'act_quant': Int8ActPerTensorFloatMinMaxInit, 'return_quant_tensor': True, 'signed': False, 'bit_width' : 8, 'min_val' : -128.0, 'max_val' : 127.0})
-                                                            }
+                                output_quant_identity_map = {'signed': (qnn.QuantIdentity, {'act_quant': Int8ActPerTensorFloat, 'return_quant_tensor': True, 'bit_width': 8}), 
+                                                            'unsigned': (qnn.QuantIdentity, {'act_quant': Int8ActPerTensorFloat, 'return_quant_tensor': True, 'signed': False, 'bit_width' : 8})
+                        '''
+                        for n in node.users:
+                            if n.op == 'output':
+                                output_quant_identity_map['signed'] = (qnn.QuantIdentity, {'act_quant' : Int8ActPerTensorFloatMinMaxInit,
+                                                                        'bit_width' : 8,
+                                                                        'narrow_range' : False,
+                                                                        'min_val' : -128.0,
+                                                                        'max_val' : 127.0,
+                                                                        'return_quant_tensor' : True})
+                                output_quant_identity_map['unsigned'] = (qnn.QuantIdentity, {'act_quant' : Int8ActPerTensorFloatMinMaxInit,
+                                                                        'bit_width' : 8,
+                                                                        'narrow_range' : False,
+                                                                        'min_val' : -128.0,
+                                                                        'max_val' : 127.0,
+                                                                        'signed' : False,
+                                                                        'return_quant_tensor' : True})
+                        
                         output_quant_handler(
                         model,
                         node,

@@ -95,6 +95,12 @@ class Finetuner(object):
 				transforms.ToTensor(),
 				normalize
 			])
+
+			export_transformations = transforms.Compose([
+				transforms.Resize(28),
+				transforms.CenterCrop(28),
+				transforms.PILToTensor(),
+			])
 		else:
 			# for imagenet
 			transformations = transforms.Compose([
@@ -102,6 +108,12 @@ class Finetuner(object):
 					transforms.CenterCrop(config['center_crop_shape']),
 					transforms.ToTensor(),
 					normalize
+				])
+			
+			export_transformations = transforms.Compose([
+					transforms.Resize(config['resize_shape']),
+					transforms.CenterCrop(config['center_crop_shape']),
+					transforms.PILToTensor(),
 				])
 		
 		self.train_set = builder(root=args.datadir,
@@ -113,6 +125,11 @@ class Finetuner(object):
 						   train=False,
 						   download=True,
 						   transform=transformations)
+	
+		self.export_set = builder(root = args.datadir, 
+							train = False,
+							download = True,
+							transform = export_transformations)
 
 		total_length = len(self.train_set)
 		calib_length = int(args.calib_subset * total_length)
@@ -152,6 +169,12 @@ class Finetuner(object):
 									   generator = g)
 			 
 		self.test_loader = DataLoader(self.test_set,
+									  batch_size = self.batch_size_testing,
+									  num_workers = self.args.num_workers,
+									  worker_init_fn=seed_worker,
+									  generator = g)
+
+		self.export_loader = DataLoader(self.export_set,
 									  batch_size = self.batch_size_testing,
 									  num_workers = self.args.num_workers,
 									  worker_init_fn=seed_worker,

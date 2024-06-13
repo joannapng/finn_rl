@@ -79,7 +79,7 @@ class ActTypes(IntEnum):
     RELU6 = 1
     SIGMOID = 2
 
-class ModelEnv:
+class ModelEnv(gym.Env):
     def __init__(self, args, model_config):
         self.args = args
 
@@ -152,6 +152,7 @@ class ModelEnv:
         self.quantizable_idx = []
         self.bound_list = []
         self.num_quant_acts = 0
+        self.quantizable_nodes = []
         layer_embedding = []
 
         # Activations first
@@ -178,6 +179,15 @@ class ModelEnv:
                     elif type(module) == nn.Sigmoid or type(module) == qnn.QuantSigmoid:
                         this_state.append([ActTypes.SIGMOID])
 
+                    if node.next.op == 'call_module':
+                        next_module = get_module(self.model, node.next.target)                    
+                        if type(module) in self.quantizable_layers:
+                            self.quantizable_nodes.append(next_module)
+                        else:
+                            self.quantizable_nodes.append(None)
+                    else:
+                        self.quantizable_nodes.append(None)
+                    
                     this_state.append([module.flops])
                     this_state.append([module.params])
                     this_state.append([1.0])
@@ -210,11 +220,13 @@ class ModelEnv:
                     elif type(module) == nn.ConvTranspose2d or type(module) == qnn.QuantConvTranspose2d:
                         this_state.append([LayerTypes.CONVTRANSPOSE2D])
 
+                    self.quantizable_nodes.append(module)
                     this_state.append([module.flops])
                     this_state.append([module.params])
                     this_state.append([1.0])
                     layer_embedding.append(np.hstack(this_state))
 
+        print(self.quantizable_nodes)
         layer_embedding = np.array(layer_embedding, dtype=np.float32)
         # normalize to (0, 1)
         for i in range(layer_embedding.shape[1]):
@@ -242,7 +254,7 @@ class ModelEnv:
         self.strategy = []
 
         obs = self.layer_embedding[0].copy()
-        return obs
+        return obs, {}
 
     def step(self, action):
         action = self.get_action(action)
@@ -277,7 +289,7 @@ class ModelEnv:
             obs = self.layer_embedding[self.cur_ind, :].copy()
             done = True
             info = {'accuracy' : acc, 'fps' : fps, 'avg_util' : avg_util, 'strategy' : self.strategy}
-            return obs, reward, done, info 
+            return obs, reward, done, False, info 
         
         reward = 0 
 
@@ -289,17 +301,16 @@ class ModelEnv:
         done = False
         obs = self.layer_embedding[self.cur_ind, :].copy()
         info = {'accuracy' : 0.0, 'fps' : 0.0, 'avg_util' : 0.0, 'strategy' : self.strategy}
-        return obs, reward, done, info
+        return obs, reward, done, False, info
     
     def reward(self, acc):
-        return acc * 100
+        return acc * 0.02 - 1.0
         
     def get_action(self, action):
-        action = float(action)
-        min_bit, max_bit = self.bound_list[self.cur_ind]
-        lbound, rbound = min_bit - 0.5, max_bit + 0.5
-        action = (rbound - lbound) * action + lbound
-        action = int(np.round(action, 0))
+        action = float(action[0])
+        lbound, rbound = self.bound_list[self.cur_ind]
+        action = (action + 1) * (rbound - lbound) / 2.0 + lbound - 0.5
+        action = np.ceil(action).astype(int)
         return action
 
     def is_final_layer(self):
@@ -336,6 +347,7 @@ class ModelEnv:
 
             fps = self.args.freq * 10**6 / cycles
 
+            print(f'Achieved fps: {fps}')
             if fps >= self.args.target_fps:
                 break
             else:
@@ -387,6 +399,7 @@ class ModelEnv:
         model = tidy_up(model)
         model = qonnx_to_finn(model)
         model = streamline_function(model)
+        model.save('streamlined_resnet.onnx')
         model = convert_to_hw_function(model)
         model = create_dataflow_partition(model)
         model = specialize_layers(model, self.args.fpga_part)

@@ -26,10 +26,6 @@ class LeNet5(nn.Module):
 
         self.name = "LeNet5"
 
-        for m in self.modules():
-            if isinstance(m, nn.Conv2d) or isinstance(m, nn.Linear):
-                torch.nn.init.uniform_(m.weight.data, -1, 1)
-    
     def clip_weights(self, min_val = -1, max_val = 1):
         for mod in self.conv_features:
             if isinstance(mod, nn.Conv2d):
@@ -39,6 +35,7 @@ class LeNet5(nn.Module):
                 mod.weight.data.clamp_(min_val, max_val)
         
     def forward(self, x):
+        x = 2.0 * x - 1.0
         for mod in self.conv_features:
             x = mod(x)
 

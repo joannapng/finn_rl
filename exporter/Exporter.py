@@ -125,6 +125,19 @@ from qonnx.transformation.general import ConvertSubToAdd, ConvertDivToMul
 import finn.transformation.streamline.collapse_repeated as collapse
 import finn.transformation.streamline.reorder as reorder
 
+from qonnx.transformation.infer_datatypes import InferDataTypes
+from qonnx.transformation.quant_constant_folding import FoldTransposeIntoQuantInit
+from qonnx.transformation.remove import RemoveIdentityOps
+
+from finn.transformation.qonnx.fold_quant_weights import FoldQuantWeights
+from finn.transformation.qonnx.infer_quant_avg_pool_2d import (
+    AvgPoolAndTruncToQuantAvgPool,
+)
+from finn.transformation.qonnx.quant_act_to_multithreshold import (
+    ConvertQuantActToMultiThreshold,
+    default_filter_function_generator,
+)
+
 from samo.backend.finn import parser
 from samo.backend.finn import export as exporter
 from samo.optimiser.annealing import SimulatedAnnealing
@@ -161,13 +174,11 @@ def preprocessing(model: ModelWrapper, cfg: build.DataflowBuildConfig):
 	model.set_tensor_datatype(global_inp_name, DataType["UINT8"])
 	model = tidy_up(model)
 
-	model = model.transform(RoundAndClipThresholds())
 	return model
 
 def postprocessing(model: ModelWrapper, cfg: build.DataflowBuildConfig):
 	model = model.transform(InsertTopK(k=1))
 	model = tidy_up(model)
-	model = model.transform(RoundAndClipThresholds())
 	return model
 
 def make_input_channels_last(model: ModelWrapper, cfg: build.DataflowBuildConfig):
@@ -189,6 +200,12 @@ def qonnx_to_finn(model: ModelWrapper, cfg: build.DataflowBuildConfig):
 			)
 		)
 	)
+
+	model = model.transform(InferDataTypes())
+	# Convert AvgPool -> Mul -> Trunc structure to QuantAvgPool2d
+	model = model.transform(AvgPoolAndTruncToQuantAvgPool())
+	# Remove empty padding if it exists
+	model = model.transform(RemoveIdentityOps())
 
 	return model
 
@@ -224,27 +241,30 @@ def streamline_lenet(model: ModelWrapper, cfg: build.DataflowBuildConfig):
 def streamline_resnet(model: ModelWrapper, cfg: build.DataflowBuildConfig):
 	model = model.transform(ConvertSubToAdd())
 	model = model.transform(ConvertDivToMul())
-	model = model.transform(collapse.CollapseRepeatedMul())
+	model = model.transform(absorb.AbsorbAddIntoMultiThreshold())
 	model = model.transform(absorb.AbsorbSignBiasIntoMultiThreshold())
 
-	model = model.transform(absorb.Absorb1BitMulIntoConv())
-	model = model.transform(absorb.Absorb1BitMulIntoMatMul())
-	
-	model = model.transform(absorb.AbsorbAddIntoMultiThreshold())
-	model = model.transform(absorb.AbsorbMulIntoMultiThreshold())
-
-	model = model.transform(absorb.AbsorbScalarMulAddIntoTopK())
-
-	model = model.transform(reorder.MoveMulPastMaxPool())
+	model = model.transform(collapse.CollapseRepeatedMul())
 	model = model.transform(reorder.MoveLinearPastFork())
+	model = model.transform(absorb.AbsorbMulIntoMultiThreshold())
+	model = model.transform(collapse.CollapseRepeatedMul())
+
+	for i in range(2):
+		model = model.transform(absorb.AbsorbAddIntoMultiThreshold())
+		model = model.transform(reorder.MoveScalarMulPastConv())
+		model = model.transform(reorder.MoveScalarMulPastMatMul())
+		model = model.transform(collapse.CollapseRepeatedMul())
+
 	model = model.transform(reorder.MoveLinearPastEltwiseAdd())
-	model = model.transform(reorder.MoveScalarMulPastConv())
+	model = model.transform(absorb.AbsorbMulIntoMultiThreshold())
+	model = model.transform(reorder.MoveLinearPastFork())
+
+	model = model.transform(reorder.MoveScalarLinearPastInvariants())
+	model = model.transform(absorb.AbsorbMulIntoMultiThreshold())
 	model = model.transform(reorder.MoveScalarMulPastMatMul())
-	model = model.transform(reorder.MoveScalarLinearPastInvariants()) # for the mul before the global average pool
 	model = model.transform(absorb.AbsorbMulIntoMultiThreshold())
 	model = model.transform(absorb.AbsorbScalarMulAddIntoTopK())
 	model = model.transform(absorb.AbsorbTransposeIntoMultiThreshold())
-
 	model = model.transform(RoundAndClipThresholds())
 	model = model.transform(InferDataLayouts())
 	model = model.transform(RemoveUnusedTensors())
@@ -262,8 +282,8 @@ def convert_to_hw_resnet(model: ModelWrapper, cfg: build.DataflowBuildConfig):
 	model = model.transform(convert.InferChannelwiseLinearLayer())
 	model = model.transform(convert.InferConvInpGen())
 	model = model.transform(RoundAndClipThresholds())
-	model = model.transform(convert.InferQuantizedMatrixVectorActivation())
 	model = model.transform(convert.InferBinaryMatrixVectorActivation())
+	model = model.transform(convert.InferQuantizedMatrixVectorActivation())
 
 	model = model.transform(absorb.AbsorbConsecutiveTransposes())
 	model = model.transform(reorder.MoveTransposePastFork())
@@ -298,8 +318,8 @@ def convert_to_hw_lenet(model: ModelWrapper, cfg: build.DataflowBuildConfig):
 	model = model.transform(LowerConvsToMatMul())
 	model = model.transform(convert.InferConvInpGen())
 	model = model.transform(RoundAndClipThresholds())
-	model = model.transform(convert.InferQuantizedMatrixVectorActivation())
 	model = model.transform(convert.InferBinaryMatrixVectorActivation())
+	model = model.transform(convert.InferQuantizedMatrixVectorActivation())
 	model = model.transform(absorb.AbsorbTransposeIntoMultiThreshold())
 	model = model.transform(absorb.AbsorbConsecutiveTransposes())
 
