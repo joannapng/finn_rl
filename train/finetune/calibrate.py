@@ -14,9 +14,10 @@ def calibrate(args, model, calib_loader):
                 images = images.to(dtype)
                 model(images)
 
-        if args.bias_corr:
-            with bias_correction_mode(model):
-                for i, (images, target) in enumerate(calib_loader):
-                    images = images.to(device)
-                    images = images.to(dtype)
-                    model(images)
+        '''
+        with bias_correction_mode(model):
+            for i, (images, target) in enumerate(calib_loader):
+                images = images.to(device)
+                images = images.to(dtype)
+                model(images)
+        '''

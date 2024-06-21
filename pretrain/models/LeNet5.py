@@ -35,7 +35,6 @@ class LeNet5(nn.Module):
                 mod.weight.data.clamp_(min_val, max_val)
         
     def forward(self, x):
-        x = 2.0 * x - 1.0
         for mod in self.conv_features:
             x = mod(x)
 

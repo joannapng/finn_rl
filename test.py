@@ -1,12 +1,16 @@
 from pkgutil import get_data
+import attr
 import onnx
 import onnx.numpy_helper as nph
 import torch
+import brevitas
+
 import math
 import numpy as np
 import argparse
 from brevitas.graph.utils import get_module
 import importlib_resources as importlib
+from urllib3 import disable_warnings
 
 from train.env import ModelEnv
 from stable_baselines3.common.monitor import Monitor
@@ -29,6 +33,7 @@ rl_algorithms = {
 }
 
 model_names = ['LeNet5', 'resnet18', 'resnet34', 'resnet50', 'resnet100', 'resnet152']
+
 
 def get_example_input(dataset):
     if dataset == "MNIST":
@@ -127,42 +132,49 @@ center_crop_shape = model_config['center_crop_shape']
 img_shape = center_crop_shape
 
 '''
-#input_tensor_torch, _ = next(iter(env.finetuner.export_loader))
-input_tensor_torch = next(iter(env.finetuner.export_loader))[0][0]
-input_tensor_torch = input_tensor_torch[None, :, :, :]
-input_tensor_npy = input_tensor_torch.cpu().numpy().astype(np.float32)  
-input_tensor_npy = np.transpose(input_tensor_npy, (0, 2, 3, 1)) # N, H, W, C
-input_tensor_torch = input_tensor_torch.detach().to(env.finetuner.device) / 255.0
-np.save("input.npy", input_tensor_npy)
-
-output_golden = model.forward(input_tensor_torch).detach().cpu().numpy()
-output_golden = np.argmax(output_golden, axis = 1)
-np.save("expected_output.npy", output_golden)
-'''
-
 input_tensor_npy = get_example_input(args.dataset)
 input_tensor_torch = torch.from_numpy(input_tensor_npy).float() / 255.0
 input_tensor_torch = input_tensor_torch.detach().to(env.finetuner.device)
 input_tensor_npy = np.transpose(input_tensor_npy, (0, 2, 3, 1)) # N, H, W, C
-np.save("input.npy", input_tensor_npy)
+np.save(f'{os.path.join(args.output_dir, "input.npy")}', input_tensor_npy)
+'''
 
-output_golden = model.forward(input_tensor_torch).detach().cpu().numpy()
-print(output_golden)
-output_golden = np.flip(output_golden.flatten().argsort())[:1]
-print(output_golden)
-np.save("expected_output.npy", output_golden)
+input_tensor_torch, _ = next(iter(env.finetuner.export_loader))
+input_tensor_numpy = input_tensor_torch.detach().cpu().numpy().astype(np.float32)
+input_tensor_numpy = np.transpose(input_tensor_numpy, (0, 2, 3, 1))
+np.save(f'{os.path.join(args.output_dir, "input.npy")}', input_tensor_numpy)
 
+output_golden = model.forward(input_tensor_torch.to(env.finetuner.device)).detach().cpu().numpy()
+output_golden = np.argmax(output_golden, axis = 1)
+np.save(f'{os.path.join(args.output_dir, "expected_output.npy")}', output_golden)
+
+# export quant model to qonnx
+output = os.path.join(args.output_dir, args.onnx_output)
+name = output + '_quant.onnx'
+model.cpu()
 device, dtype = next(model.parameters()).device, next(model.parameters()).dtype
 ref_input = torch.randn(1, env.finetuner.in_channels, img_shape, img_shape, device = device, dtype = dtype)
+
+bo.export_qonnx(model, input_t = ref_input, export_path = name, opset_version = 11)
+from qonnx.core.modelwrapper import ModelWrapper
+model = ModelWrapper(name)
 
 # export original model to onnx
 orig_model = env.orig_model
 orig_model.eval()
-output = os.path.join(args.output_dir, args.onnx_output)
+orig_model.cpu()
 name = output + '.onnx'
-torch.onnx.export(orig_model, ref_input, name, export_params = False, opset_version=11)
+torch.onnx.export(orig_model, ref_input, name, export_params = True, opset_version=11)
 
-# export quant model to qonnx
-name = output + '_quant.onnx'
-bo.export_qonnx(model, ref_input, export_path = name, export_params = True, keep_initializers_as_inputs = False, opset_version=11)
+graph = model.graph
+for node in graph.node:
+    if node.op_type in ["Quant", "BinaryQuant", "Trunc"] and "weight_quant" in node.name:
+        for attribute in node.attribute:
+            if attribute.name == "signed":
+                attribute.i = 1
+            elif attribute.name == "narrow":
+                attribute.i = 0
+
+model.save(output + '_quant.onnx')
+
 

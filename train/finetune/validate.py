@@ -52,15 +52,14 @@ def accuracy(output, target, topk=(1,), stable=False):
         return res
 
 
-def validate(model, val_loader, eval = True):
+def validate(model, val_loader):
     top1 = AverageMeter('Acc@1', ':6.2f')
 
     def print_accuracy(top1, prefix=''):
         print('{}Avg acc@1 {top1.avg:2.3f}'.format(prefix, top1=top1))
 
     # do not set model to eval mode because it requires that the residual connections are handled
-    if eval:
-        model.eval()
+    model.eval()
         
     dtype = next(model.parameters()).dtype
     device = next(model.parameters()).device

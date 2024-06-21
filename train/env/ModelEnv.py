@@ -254,6 +254,12 @@ class ModelEnv(gym.Env):
         self.strategy = []
 
         obs = self.layer_embedding[0].copy()
+        self.quantizer = Quantizer(
+            self.model,
+            self.args.weight_bit_width,
+            self.args.act_bit_width,
+            self.args.bias_bit_width
+        )
         return obs, {}
 
     def step(self, action):
@@ -279,6 +285,8 @@ class ModelEnv(gym.Env):
             self.finetuner.finetune()
 
             # validate model
+            self.model = deepcopy(self.finetuner.model)
+            self.finetuner.model = deepcopy(self.model)
             acc = self.finetuner.validate()
             
             reward = self.reward(acc)

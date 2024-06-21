@@ -171,7 +171,7 @@ def preprocessing(model: ModelWrapper, cfg: build.DataflowBuildConfig):
 
 	model = model.transform(MergeONNXModels(preproc_model))
 	global_inp_name = model.graph.input[0].name
-	model.set_tensor_datatype(global_inp_name, DataType["UINT8"])
+	model.set_tensor_datatype(global_inp_name, DataType["INT8"])
 	model = tidy_up(model)
 
 	return model

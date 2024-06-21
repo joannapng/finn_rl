@@ -18,7 +18,7 @@ from brevitas.graph.base import ModuleInstanceToModuleInstance
 
 from brevitas.quant.scaled_int import Int8ActPerTensorFloat
 from brevitas.quant.scaled_int import Int8ActPerTensorFloatMinMaxInit, Uint8ActPerTensorFloatMaxInit
-from brevitas.quant.scaled_int import Int8WeightPerTensorFloat
+from brevitas.quant import Int8WeightPerTensorFloat
 from brevitas.quant.scaled_int import Int16Bias
 from brevitas.quant.scaled_int import Int32Bias
 from brevitas.quant.scaled_int import Int8Bias
@@ -27,13 +27,14 @@ from brevitas.graph.standardize import DisableLastReturnQuantTensor
 from brevitas.graph.quantize_impl import SIGN_PRESERVING_MODULES
 
 from train.quantizer.utils import align_input_quant
-from brevitas_examples.bnn_pynq.models.common import CommonActQuant
+from brevitas_examples.bnn_pynq.models.common import CommonActQuant, CommonWeightQuant
 from brevitas.core.scaling import ScalingImplType
 
 BIAS_BIT_WIDTH_MAP = {32: Int32Bias, 16: Int16Bias, 8: Int8Bias, None: None}
 UNSIGNED_ACT_TUPLE = (nn.ReLU, nn.ReLU6, nn.Sigmoid, nn.Hardsigmoid)
 
 
+    
 class Quantizer(object):
     def __init__(
             self,
@@ -94,7 +95,7 @@ class Quantizer(object):
         def kwargs_prefix(prefix, weight_kwargs):
             return {prefix + k: v for k, v in weight_kwargs.items()}
         
-        weight_bit_width_dict = {'bit_width' : weight_bit_width}
+        weight_bit_width_dict = {'bit_width' : 8}
         act_bit_width_dict = {'bit_width': act_bit_width}
 
         self.bias_quant = BIAS_BIT_WIDTH_MAP[bias_bit_width] if bias_bit_width is not None else None
@@ -113,15 +114,14 @@ class Quantizer(object):
 
         weight_quant = weight_quant.let(
             **{
+                'signed' : True,
                 'narrow_range' : False,
-                'scaling_impl': ParameterFromStatsFromParameterScaling
             }
         )
 
         act_quant = act_quant.let(
             **{
                 'high_percentile_q': 99.999, 'dtype' : torch.float32,
-                'scaling_imp': ParameterFromStatsFromParameterScaling
             }
         )
 
@@ -143,7 +143,11 @@ class Quantizer(object):
             **weight_quant_dict,
             'dtype': torch.float32,
             'return_quant_tensor': True,
-            'bias_quant': bias_quant
+            'bias_quant': bias_quant,
+            'weight_narrow_range' : False,
+            'weight_signed' : True,
+            'signed' : True,
+            'narrow_range' : False,
         }
 
         quant_mha_kwargs = {
@@ -210,8 +214,8 @@ class Quantizer(object):
             quantizable_idx = self.update_index(model, quantizable_idx)
 
         # quantize add outputs and handle residuals
-        self.quantize_output(model)
-        self.handle_residuals(model)
+        model = self.quantize_output(model)
+        model = self.handle_residuals(model)
         quantizable_idx = self.update_index(model, quantizable_idx)
 
         # quantize compute layers
@@ -253,9 +257,11 @@ class Quantizer(object):
         input_quantizer = (qnn.QuantIdentity, {'act_quant' : CommonActQuant,
                                                'bit_width' : 8,
                                                'narrow_range' : False,
-                                               'min_value' : -1.0,
-                                               'max_value' : 1.0 - 2**(-7),
-                                               'return_quant_tensor' : True})
+                                               'min_value' : 0.0,
+                                               'max_value' : 1.0,
+                                               'return_quant_tensor' : True,
+                                               'scaling_impl_type' : ScalingImplType.CONST})
+        '''
         rewriters = []
       
         # insert quantizer after the mul and sub nodes
@@ -270,6 +276,8 @@ class Quantizer(object):
         for rewriter in rewriters:
             model = rewriter.apply(model)
 
+        '''
+        model = inp_placeholder_handler(model, input_quantizer)
         return model
 
     def quantize_act(self,
@@ -284,7 +292,7 @@ class Quantizer(object):
                 module = get_module(model, node.target)
                 if isinstance(module, tuple(layer_map.keys())):       
                     
-                    quant_module_class, quant_module_kwargs = layer_map[type(module)]
+                    quant_module_class, quant_module_kwargs = deepcopy(layer_map[type(module)])
                     quant_module_kwargs['bit_width'] = act_bit_width
                     quant_module = quant_module_class(**quant_module_kwargs)
                         
@@ -342,9 +350,9 @@ class Quantizer(object):
         quant_identity_map = self.quantize_kwargs['quant_identity_map']
         quant_act_map = self.quantize_kwargs['quant_act_map']
         unsigned_act_tuple = UNSIGNED_ACT_TUPLE
+        rewriters = []
         
         for i, node in enumerate(model.graph.nodes):
-            rewriters = []
             if node.op == 'call_module' and i == layer_idx:
                 module = get_module(model, node.target)
                 if isinstance(module, tuple(layer_map.keys())):
@@ -370,32 +378,29 @@ class Quantizer(object):
                                                             'unsigned': (qnn.QuantIdentity, {'act_quant': Int8ActPerTensorFloat, 'return_quant_tensor': True, 'signed': False, 'bit_width' : 8})
                         '''
                         for n in node.users:
-                            if n.op == 'output':
-                                output_quant_identity_map['signed'] = (qnn.QuantIdentity, {'act_quant' : Int8ActPerTensorFloatMinMaxInit,
-                                                                        'bit_width' : 8,
-                                                                        'narrow_range' : False,
-                                                                        'min_val' : -128.0,
-                                                                        'max_val' : 127.0,
-                                                                        'return_quant_tensor' : True})
-                                output_quant_identity_map['unsigned'] = (qnn.QuantIdentity, {'act_quant' : Int8ActPerTensorFloatMinMaxInit,
-                                                                        'bit_width' : 8,
-                                                                        'narrow_range' : False,
-                                                                        'min_val' : -128.0,
-                                                                        'max_val' : 127.0,
-                                                                        'signed' : False,
-                                                                        'return_quant_tensor' : True})
-                        
-                        output_quant_handler(
-                        model,
-                        node,
-                        rewriters,
-                        is_sign_preserving=isinstance(module, SIGN_PRESERVING_MODULES),
-                        quant_identity_map=output_quant_identity_map,
-                        quant_act_map=quant_act_map,
-                        unsigned_act_tuple=unsigned_act_tuple)
+                            if n.op == 'output':                    
+                                output_quant_identity_map['signed'][1]['bit_width'] = 8
+                                output_quant_identity_map['unsigned'][1]['bit_width'] = 8
+                                output_quant_handler(
+                                model,
+                                node,
+                                rewriters,
+                                is_sign_preserving=isinstance(module, SIGN_PRESERVING_MODULES),
+                                quant_identity_map=output_quant_identity_map,
+                                quant_act_map=quant_act_map,
+                                unsigned_act_tuple=unsigned_act_tuple)         
+                            else:
+                                output_quant_handler(
+                                model,
+                                node,
+                                rewriters,
+                                is_sign_preserving=isinstance(module, SIGN_PRESERVING_MODULES),
+                                quant_identity_map=output_quant_identity_map,
+                                quant_act_map=quant_act_map,
+                                unsigned_act_tuple=unsigned_act_tuple)
 
                     if layer_map[type(module)] is not None:
-                        quant_module_class, quant_module_kwargs = layer_map[type(module)]
+                        quant_module_class, quant_module_kwargs = deepcopy(layer_map[type(module)])
                         quant_module_kwargs['weight_bit_width'] = weight_bit_width
                         
                         if module.bias is not None:
@@ -418,11 +423,17 @@ class Quantizer(object):
                                 name, previous_node, tuple(previous_node_users)
                             )
                             rewriters.append(rewriter)
-                        rewriter = ModuleToModuleByInstance(
-                            module, quant_module_class, **quant_module_kwargs
-                        )
-                        rewriters.append(rewriter)
-                        break
+                            break
+    
+        quant_module_kwargs['weight_narrow_range'] = False
+        quant_module_kwargs['narrow_range'] = False
+        quant_module_kwargs['weight_signed'] = True
+        quant_module_kwargs['signed'] = True
+        rewriter = ModuleToModuleByInstance(
+            module, quant_module_class, **quant_module_kwargs
+        )
+
+        rewriters.append(rewriter)
 
         for rewriter in rewriters:
             model = rewriter.apply(model)

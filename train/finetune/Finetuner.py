@@ -82,6 +82,13 @@ class Finetuner(object):
 				transforms.ToTensor(),
 				normalize
 			])
+
+			export_transformations = transforms.Compose([
+				transforms.RandomCrop(32, padding = 4),
+				transforms.RandomHorizontalFlip(),
+				transforms.ToTensor(),
+			])
+
 		elif args.dataset == 'MNIST':
 			normalize = transforms.Normalize(mean = (0.1307, ), std = (0.3081, ))
 
@@ -93,7 +100,6 @@ class Finetuner(object):
 				transforms.Resize(28),
 				transforms.CenterCrop(28),
 				transforms.ToTensor(),
-				normalize
 			])
 
 			export_transformations = transforms.Compose([
@@ -107,7 +113,6 @@ class Finetuner(object):
 					transforms.Resize(config['resize_shape']),
 					transforms.CenterCrop(config['center_crop_shape']),
 					transforms.ToTensor(),
-					normalize
 				])
 			
 			export_transformations = transforms.Compose([
@@ -211,11 +216,10 @@ class Finetuner(object):
 		elif self.args.loss == 'SqrHinge':
 			self.criterion = nn.SqrHingeLoss()
 	
-	def check_accuracy(self, loader, model, eval = True):
+	def check_accuracy(self, loader, model):
 		num_correct = 0
 		num_samples = 0
-		if eval:
-			model.eval() # set model to evaluation mode
+		model.eval() # set model to evaluation mode
 
 		with torch.no_grad():
 			for x_val, y_val in loader:
@@ -254,11 +258,11 @@ class Finetuner(object):
 			#print("Training Complete")
 			# Testing accuracy in the testing dataset
 			print('-------- Testing Accuracy -------')
-			self.test_acc = self.check_accuracy(self.test_loader, self.model, eval = False)
+			self.test_acc = self.check_accuracy(self.test_loader, self.model)
 			return 0.0, self.model
 	
-	def validate(self, eval = True):
-		return validate(self.model, val_loader=self.test_loader, eval = eval)
+	def validate(self):
+		return validate(self.model, val_loader=self.test_loader)
 
 	def calibrate(self):
 		calibrate(self.args, self.model, calib_loader=self.calib_loader)

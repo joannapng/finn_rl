@@ -83,9 +83,7 @@ class Trainer(object):
 
 			transformations = transforms.Compose([
 				transforms.RandomCrop(32, padding = 4),
-				transforms.RandomHorizontalFlip(),
 				transforms.ToTensor(),
-				normalize
 			])
 		elif args.dataset == 'MNIST':
 			normalize = transforms.Normalize(mean = (0.1307, ), std = (0.3081, ))
@@ -98,7 +96,6 @@ class Trainer(object):
 				transforms.Resize(28),
 				transforms.CenterCrop(28),
 				transforms.ToTensor(),
-				normalize
 			])
 
 		train_set = builder(root=args.datadir,
