@@ -24,9 +24,6 @@ def set_defaults(model):
 		if "SIMD" in attrs:
 			inst.set_nodeattr("SIMD", 1)
 
-		if "runtime_writeable_weights" in attrs:
-			inst.set_nodeattr("runtime_writeable_weights", 1)
-
 	return model
 
 def estimate_resources(model):
@@ -73,11 +70,14 @@ def reduceBRAMUsage(model, resources_per_layer, available_resources, max_iters =
 				mem_mode = node_inst.get_nodeattr("mem_mode")
 				if mem_mode != "internal_embedded" and node_inst.calc_wmem() <= 128:
 					node_inst.set_nodeattr("mem_mode", "internal_embedded")
+					node_inst.set_nodeattr("runtime_writeable_weights", 0)
 					break
 				elif mem_mode == "internal_decoupled":
 					node_inst.set_nodeattr("ram_style", "ultra")
+					node_inst.set_nodeattr("runtime_writeable_weights", 1)
 					if node_inst.uram_efficiency_estimation() < 0.1:
 						node_inst.set_nodeattr("ram_style", "distributed")
+						node_inst.set_nodeattr("runtime_writeable_weights", 0)
 						break
 			elif op_type == "Channelwise_op_hls":
 				ram_style = node_inst.get_nodeattr("ram_style")
@@ -89,6 +89,7 @@ def reduceBRAMUsage(model, resources_per_layer, available_resources, max_iters =
 				ram_style = node_inst.get_nodeattr("ram_style")
 				if ram_style != "distributed":
 					node_inst.set_nodeattr("ram_style", "distributed")
+					node_inst.set_nodeattr("runtime_writeable_weights", 0)
 					break
 		
 		resources_per_layer = estimate_resources(model)
@@ -154,8 +155,10 @@ def reduceLUTUsage(model, resources_per_layer, available_resources, max_iters = 
 				
 				if ram_style == "distributed":
 					node_inst.set_nodeattr("ram_style", "ultra")
+					node_inst.set_nodeattr("runtime_writeable_weights", 1)
 					if node_inst.uram_efficiency_estimation() < 0.1:
 						node_inst.set_nodeattr("ram_style", "block")
+						node_inst.set_nodeattr("runtime_writeable_weights", 0)
 					break
 			elif op_type == "Thresholding_hls":
 				ram_style = node_inst.get_nodeattr("ram_style")

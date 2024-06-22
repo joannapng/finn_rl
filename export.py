@@ -4,10 +4,10 @@ import onnx
 import onnx.numpy_helper as nph
 import torch
 import numpy as np
-from exporter.Exporter import (preprocessing, postprocessing, 
+from exporter.Exporter import (create_dataflow_partition, preprocessing, postprocessing, 
 							   make_input_channels_last, streamline_resnet, 
 							   convert_to_hw_resnet, name_nodes, streamline_lenet,
-							   convert_to_hw_lenet, qonnx_to_finn)
+							   convert_to_hw_lenet, qonnx_to_finn, specialize_layers)
 
 import finn.builder.build_dataflow as build
 import finn.builder.build_dataflow_config as build_cfg
@@ -28,6 +28,7 @@ parser.add_argument('--shell-flow-type', default = "vitis_alveo", choices = ["vi
 parser.add_argument('--input-file', default = 'input.npy', type = str, help = 'Input file for validation')
 parser.add_argument('--expected-output-file', default = 'expected_output.npy', type = str, help = 'Output file for validation')
 parser.add_argument('--folding-config-file', default = 'auto_folding_config.json', type = str, help = 'Folding config file')
+#parser.add_argument('--specialize-layers-config-file', default = 'specialize_layers_config.json', type = str, help = 'Specialize layers config')
 
 streamline_functions = {
 	'LeNet5' : streamline_lenet,
@@ -66,6 +67,7 @@ def main():
 		folding_config_file = args.folding_config_file,
 		verify_input_npy = args.input_file,
 		verify_expected_output_npy = args.expected_output_file,
+		verify_save_full_context = True,
 		steps = [
 			preprocessing,
 			postprocessing,
@@ -76,7 +78,6 @@ def main():
 			convert_to_hw_function,
 			"step_create_dataflow_partition",
 			"step_specialize_layers",
-			name_nodes,
 			"step_apply_folding_config",
 			"step_minimize_bit_width",
 			"step_generate_estimate_reports",

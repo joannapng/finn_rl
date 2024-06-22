@@ -185,6 +185,29 @@ def make_input_channels_last(model: ModelWrapper, cfg: build.DataflowBuildConfig
 	model = model.transform(MakeInputChannelsLast())
 	return model
 
+def create_dataflow_partition(model: ModelWrapper, cfg: build.DataflowBuildConfig):
+	parent_model = model.transform(
+		CreateDataflowPartition()
+	)
+
+	sdp_nodes = parent_model.get_nodes_by_op_type("StreamingDataflowPartition")
+	sdp_node = sdp_nodes[0]
+	sdp_node = getCustomOp(sdp_node)
+	dataflow_model_filename = sdp_node.get_nodeattr("model")
+	model = ModelWrapper(dataflow_model_filename)
+
+	return model
+
+def specialize_layers(model: ModelWrapper, cfg: build.DataflowBuildConfig):
+	model = model.transform(SpecializeLayers(cfg._resolve_fpga_part()))
+	model = model.transform(InferShapes())
+	model = model.transform(InferDataTypes())
+	graph = model.graph
+	for node in graph.node:
+		if "MVAU" in node.op_type:
+			print(node.op_type)
+	return model
+
 def qonnx_to_finn(model: ModelWrapper, cfg: build.DataflowBuildConfig):
 	q_count = 0
 	for op_type in ["BinaryQuant", "Quant", "Trunc"]:
@@ -193,6 +216,8 @@ def qonnx_to_finn(model: ModelWrapper, cfg: build.DataflowBuildConfig):
 		return model
 	
 	model = cleanup_model(model)
+	model = model.transform(GiveUniqueNodeNames())
+	model = model.transform(GiveReadableTensorNames())
 	model = model.transform(
 		ConvertQONNXtoFINN(
 			filter_function = default_filter_function_generator(

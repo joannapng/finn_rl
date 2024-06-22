@@ -13,11 +13,11 @@ from qonnx.transformation.insert_topk import InsertTopK
 from qonnx.core.datatype import DataType
 from qonnx.transformation.fold_constants import FoldConstants
 from qonnx.transformation.general import (
-    ApplyConfig,
-    GiveReadableTensorNames,
-    GiveUniqueNodeNames,
-    RemoveStaticGraphInputs,
-    RemoveUnusedTensors,
+	ApplyConfig,
+	GiveReadableTensorNames,
+	GiveUniqueNodeNames,
+	RemoveStaticGraphInputs,
+	RemoveUnusedTensors,
 )
 from qonnx.transformation.infer_data_layouts import InferDataLayouts
 from qonnx.transformation.infer_datatypes import InferDataTypes
@@ -33,10 +33,10 @@ import finn.transformation.streamline.absorb as absorb
 from finn.transformation.move_reshape import RemoveCNVtoFCFlatten
 from finn.transformation.qonnx.convert_qonnx_to_finn import ConvertQONNXtoFINN
 from finn.transformation.qonnx.quant_act_to_multithreshold import (
-    default_filter_function_generator,
+	default_filter_function_generator,
 )
 from finn.transformation.fpgadataflow.create_dataflow_partition import (
-    CreateDataflowPartition,
+	CreateDataflowPartition,
 )
 
 from finn.util.pytorch import ToTensor
@@ -49,19 +49,19 @@ from finn.transformation.streamline.round_thresholds import RoundAndClipThreshol
 from finn.transformation.fpgadataflow.set_folding import SetFolding
 from finn.transformation.fpgadataflow.specialize_layers import SpecializeLayers
 from finn.transformation.fpgadataflow.minimize_accumulator_width import (
-    MinimizeAccumulatorWidth,
+	MinimizeAccumulatorWidth,
 )
 from finn.transformation.fpgadataflow.minimize_weight_bit_width import (
-    MinimizeWeightBitWidth,
+	MinimizeWeightBitWidth,
 )
 from finn.analysis.fpgadataflow.res_estimation import (
-    res_estimation,
-    res_estimation_complete,
+	res_estimation,
+	res_estimation_complete,
 )
 from finn.transformation.fpgadataflow.set_fifo_depths import (
-    InsertAndSetFIFODepths,
-    RemoveShallowFIFOs,
-    SplitLargeFIFOs,
+	InsertAndSetFIFODepths,
+	RemoveShallowFIFOs,
+	SplitLargeFIFOs,
 )
 
 from finn.transformation.fpgadataflow.insert_dwc import InsertDWC
@@ -86,11 +86,11 @@ from qonnx.transformation.remove import RemoveIdentityOps
 
 from finn.transformation.qonnx.fold_quant_weights import FoldQuantWeights
 from finn.transformation.qonnx.infer_quant_avg_pool_2d import (
-    AvgPoolAndTruncToQuantAvgPool,
+	AvgPoolAndTruncToQuantAvgPool,
 )
 from finn.transformation.qonnx.quant_act_to_multithreshold import (
-    ConvertQuantActToMultiThreshold,
-    default_filter_function_generator,
+	ConvertQuantActToMultiThreshold,
+	default_filter_function_generator,
 )
 
 from samo.backend.finn import parser
@@ -144,6 +144,8 @@ def qonnx_to_finn(model):
 		return model
 	
 	model = cleanup_model(model)
+	model = model.transform(GiveUniqueNodeNames())
+	model = model.transform(GiveReadableTensorNames())
 	model = model.transform(
 		ConvertQONNXtoFINN(
 			filter_function = default_filter_function_generator(
@@ -151,12 +153,6 @@ def qonnx_to_finn(model):
 			)
 		)
 	)
-
-	model = model.transform(InferDataTypes())
-	# Convert AvgPool -> Mul -> Trunc structure to QuantAvgPool2d
-	model = model.transform(AvgPoolAndTruncToQuantAvgPool())
-	# Remove empty padding if it exists
-	model = model.transform(RemoveIdentityOps())
 
 	return model
 
@@ -177,7 +173,10 @@ def specialize_layers(model, fpga_part):
 	model = model.transform(SpecializeLayers(fpga_part))
 	model = model.transform(InferShapes())
 	model = model.transform(InferDataTypes())
-	
+	graph = model.graph
+	for node in graph.node:
+		if "MVAU" in node.op_type:
+			print(node.op_type)
 	return model
 
 def set_folding(model, board):
@@ -365,6 +364,7 @@ def convert_to_hw_lenet(model):
 	model = model.transform(convert.InferConvInpGen())
 	model = model.transform(convert.InferBinaryMatrixVectorActivation())
 	model = model.transform(convert.InferQuantizedMatrixVectorActivation())
+	model = model.transform(absorb.AbsorbAddIntoMultiThreshold())
 	model = model.transform(absorb.AbsorbTransposeIntoMultiThreshold())
 	model = model.transform(absorb.AbsorbConsecutiveTransposes())
 

@@ -12,6 +12,7 @@ from enum import IntEnum
 from brevitas.graph.utils import get_module
 from brevitas.graph.quantize import preprocess_for_quantize
 import brevitas.nn as qnn
+from urllib3 import disable_warnings
 
 from ..quantizer import Quantizer
 from ..finetune import Finetuner
@@ -39,7 +40,7 @@ from ..utils import measure_model
 from gymnasium import spaces
 from stable_baselines3.common.env_checker import check_env
 
-import brevitas.onnx as bo
+import brevitas.export as bo
 from qonnx.core.modelwrapper import ModelWrapper
 from copy import deepcopy
 
@@ -178,16 +179,7 @@ class ModelEnv(gym.Env):
                         this_state.append([ActTypes.RELU6])
                     elif type(module) == nn.Sigmoid or type(module) == qnn.QuantSigmoid:
                         this_state.append([ActTypes.SIGMOID])
-
-                    if node.next.op == 'call_module':
-                        next_module = get_module(self.model, node.next.target)                    
-                        if type(module) in self.quantizable_layers:
-                            self.quantizable_nodes.append(next_module)
-                        else:
-                            self.quantizable_nodes.append(None)
-                    else:
-                        self.quantizable_nodes.append(None)
-                    
+               
                     this_state.append([module.flops])
                     this_state.append([module.params])
                     this_state.append([1.0])
@@ -220,13 +212,11 @@ class ModelEnv(gym.Env):
                     elif type(module) == nn.ConvTranspose2d or type(module) == qnn.QuantConvTranspose2d:
                         this_state.append([LayerTypes.CONVTRANSPOSE2D])
 
-                    self.quantizable_nodes.append(module)
                     this_state.append([module.flops])
                     this_state.append([module.params])
                     this_state.append([1.0])
                     layer_embedding.append(np.hstack(this_state))
 
-        print(self.quantizable_nodes)
         layer_embedding = np.array(layer_embedding, dtype=np.float32)
         # normalize to (0, 1)
         for i in range(layer_embedding.shape[1]):
@@ -242,9 +232,7 @@ class ModelEnv(gym.Env):
         self.model = copy.deepcopy(self.orig_model).to(self.finetuner.device)
         self.build_state_embedding()
 
-        self.model.to(self.finetuner.device)
-
-        self.finetuner.model = self.model
+        self.finetuner.model = copy.deepcopy(self.model)
         self.finetuner.model.to(self.finetuner.device)
         self.finetuner.init_finetuning_optim()
         self.finetuner.init_loss()
@@ -275,7 +263,7 @@ class ModelEnv(gym.Env):
                                             self.quantizable_idx,
                                             self.num_quant_acts)
             # calibrate model 
-            self.finetuner.model = self.model 
+            self.finetuner.model = deepcopy(self.model) 
             self.finetuner.model.to(self.finetuner.device)
             self.finetuner.calibrate()
 
@@ -285,9 +273,8 @@ class ModelEnv(gym.Env):
             self.finetuner.finetune()
 
             # validate model
-            self.model = deepcopy(self.finetuner.model)
-            self.finetuner.model = deepcopy(self.model)
             acc = self.finetuner.validate()
+            self.model = deepcopy(self.finetuner.model)
             
             reward = self.reward(acc)
 
@@ -331,12 +318,15 @@ class ModelEnv(gym.Env):
                                                             self.strategy,
                                                             self.quantizable_idx,
                                                             self.num_quant_acts)
+            from train.finetune.calibrate import calibrate
+            model_for_measure = calibrate(self.args, model_for_measure, self.finetuner.calib_loader)
             # export model to qonnx
+            model_for_measure.train()
             img_shape = self.model_config['center_crop_shape']
             device, dtype = next(model_for_measure.parameters()).device, next(model_for_measure.parameters()).dtype
             ref_input = torch.randn(1, self.finetuner.in_channels, img_shape, img_shape, device = device, dtype = dtype)
-            bo.export_qonnx(model_for_measure, ref_input, export_path = 'model.onnx', keep_initializers_as_inputs = False, opset_version = 11, verbose = False)
-        
+            bo.export_qonnx(model_for_measure, ref_input, export_path = 'model.onnx', keep_initializers_as_inputs = False, opset_version = 11, verbose = False, disable_warnings = False)
+
             # Transformations
             streamline_function = streamline_functions[self.args.model_name]
             convert_to_hw_function = convert_to_hw_functions[self.args.model_name]
@@ -348,6 +338,7 @@ class ModelEnv(gym.Env):
             model = tidy_up(model)
             model = qonnx_to_finn(model)
             model = streamline_function(model)
+            model = name_nodes(model)
             model = convert_to_hw_function(model)
             model = create_dataflow_partition(model)
             model = specialize_layers(model, self.args.fpga_part)
@@ -390,11 +381,22 @@ class ModelEnv(gym.Env):
                                                         self.quantizable_idx,
                                                         self.num_quant_acts)
         # export model to qonnx
-        model_for_measure.eval()
         img_shape = self.model_config['center_crop_shape']
         device, dtype = next(model_for_measure.parameters()).device, next(model_for_measure.parameters()).dtype
         ref_input = torch.randn(1, self.finetuner.in_channels, img_shape, img_shape, device = device, dtype = dtype)
-        bo.export_qonnx(model_for_measure, ref_input, export_path = 'model.onnx', keep_initializers_as_inputs = False, opset_version = 11, verbose = False)
+        model_for_measure.eval()
+        bo.export_qonnx(model_for_measure, ref_input, export_path = 'model.onnx', keep_initializers_as_inputs = True, opset_version = 11)
+        model = ModelWrapper('model.onnx')
+        graph = model.graph
+        for node in graph.node:
+            if node.op_type in ["Quant", "BinaryQuant", "Trunc"] and "weight_quant" in node.name:
+                for attribute in node.attribute:
+                    if attribute.name == "signed":
+                        attribute.i = 1
+                    elif attribute.name == "narrow":
+                        attribute.i = 0
+
+        model.save('model.onnx')
     
         # Transformations
         streamline_function = streamline_functions[self.args.model_name]
@@ -407,8 +409,9 @@ class ModelEnv(gym.Env):
         model = tidy_up(model)
         model = qonnx_to_finn(model)
         model = streamline_function(model)
-        model.save('streamlined_resnet.onnx')
+        model = name_nodes(model)
         model = convert_to_hw_function(model)
+        model.save("to_hw_model.onnx")
         model = create_dataflow_partition(model)
         model = specialize_layers(model, self.args.fpga_part)
         model, cycles, _, _ = set_folding(model, self.args.board)

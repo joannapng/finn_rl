@@ -4,6 +4,7 @@ import onnx
 import onnx.numpy_helper as nph
 import torch
 import brevitas
+from brevitas import config
 
 import math
 import numpy as np
@@ -34,6 +35,8 @@ rl_algorithms = {
 
 model_names = ['LeNet5', 'resnet18', 'resnet34', 'resnet50', 'resnet100', 'resnet152']
 
+print(config.JIT_ENABLED)
+print(config.NATIVE_STE_BACKEND_ENABLED)
 
 def get_example_input(dataset):
     if dataset == "MNIST":
@@ -124,20 +127,12 @@ while not done:
     action, _states = rl_model.predict(obs)
     obs, rewards, done, _, info = env.step(action)
 
-model = env.finetuner.model
+model = deepcopy(env.model)
 model.eval()
 
 model_config = get_model_config(args.model_name, args.dataset)
 center_crop_shape = model_config['center_crop_shape']
 img_shape = center_crop_shape
-
-'''
-input_tensor_npy = get_example_input(args.dataset)
-input_tensor_torch = torch.from_numpy(input_tensor_npy).float() / 255.0
-input_tensor_torch = input_tensor_torch.detach().to(env.finetuner.device)
-input_tensor_npy = np.transpose(input_tensor_npy, (0, 2, 3, 1)) # N, H, W, C
-np.save(f'{os.path.join(args.output_dir, "input.npy")}', input_tensor_npy)
-'''
 
 input_tensor_torch, _ = next(iter(env.finetuner.export_loader))
 input_tensor_numpy = input_tensor_torch.detach().cpu().numpy().astype(np.float32)
@@ -155,7 +150,7 @@ model.cpu()
 device, dtype = next(model.parameters()).device, next(model.parameters()).dtype
 ref_input = torch.randn(1, env.finetuner.in_channels, img_shape, img_shape, device = device, dtype = dtype)
 
-bo.export_qonnx(model, input_t = ref_input, export_path = name, opset_version = 11)
+bo.export_qonnx(model, input_t = ref_input, export_path = name, opset_version = 11, keep_initializers_as_inputs = True, disable_warnings = False, verbose = True)
 from qonnx.core.modelwrapper import ModelWrapper
 model = ModelWrapper(name)
 
@@ -174,7 +169,7 @@ for node in graph.node:
                 attribute.i = 1
             elif attribute.name == "narrow":
                 attribute.i = 0
-
+ 
 model.save(output + '_quant.onnx')
 
 
