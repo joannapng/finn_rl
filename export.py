@@ -7,7 +7,7 @@ import numpy as np
 from exporter.Exporter import (create_dataflow_partition, preprocessing, postprocessing, 
 							   make_input_channels_last, streamline_resnet, 
 							   convert_to_hw_resnet, name_nodes, streamline_lenet,
-							   convert_to_hw_lenet, qonnx_to_finn, specialize_layers)
+							   convert_to_hw_lenet, qonnx_to_finn, specialize_layers, tidy_up)
 
 import finn.builder.build_dataflow as build
 import finn.builder.build_dataflow_config as build_cfg

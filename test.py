@@ -145,14 +145,12 @@ np.save(f'{os.path.join(args.output_dir, "expected_output.npy")}', output_golden
 
 # export quant model to qonnx
 output = os.path.join(args.output_dir, args.onnx_output)
-name = output + '_quant.onnx'
 model.cpu()
 device, dtype = next(model.parameters()).device, next(model.parameters()).dtype
 ref_input = torch.randn(1, env.finetuner.in_channels, img_shape, img_shape, device = device, dtype = dtype)
 
+name = output + '_quant.onnx'
 bo.export_qonnx(model, input_t = ref_input, export_path = name, opset_version = 11, keep_initializers_as_inputs = True, disable_warnings = False, verbose = True)
-from qonnx.core.modelwrapper import ModelWrapper
-model = ModelWrapper(name)
 
 # export original model to onnx
 orig_model = env.orig_model
@@ -160,16 +158,4 @@ orig_model.eval()
 orig_model.cpu()
 name = output + '.onnx'
 torch.onnx.export(orig_model, ref_input, name, export_params = True, opset_version=11)
-
-graph = model.graph
-for node in graph.node:
-    if node.op_type in ["Quant", "BinaryQuant", "Trunc"] and "weight_quant" in node.name:
-        for attribute in node.attribute:
-            if attribute.name == "signed":
-                attribute.i = 1
-            elif attribute.name == "narrow":
-                attribute.i = 0
- 
-model.save(output + '_quant.onnx')
-
 

@@ -318,14 +318,12 @@ class ModelEnv(gym.Env):
                                                             self.strategy,
                                                             self.quantizable_idx,
                                                             self.num_quant_acts)
-            from train.finetune.calibrate import calibrate
-            model_for_measure = calibrate(self.args, model_for_measure, self.finetuner.calib_loader)
             # export model to qonnx
-            model_for_measure.train()
+            model_for_measure.eval()
             img_shape = self.model_config['center_crop_shape']
             device, dtype = next(model_for_measure.parameters()).device, next(model_for_measure.parameters()).dtype
             ref_input = torch.randn(1, self.finetuner.in_channels, img_shape, img_shape, device = device, dtype = dtype)
-            bo.export_qonnx(model_for_measure, ref_input, export_path = 'model.onnx', keep_initializers_as_inputs = False, opset_version = 11, verbose = False, disable_warnings = False)
+            bo.export_qonnx(model_for_measure, ref_input, export_path = 'model.onnx', keep_initializers_as_inputs = True, opset_version = 11, verbose = False, disable_warnings = False)
 
             # Transformations
             streamline_function = streamline_functions[self.args.model_name]
@@ -386,17 +384,6 @@ class ModelEnv(gym.Env):
         ref_input = torch.randn(1, self.finetuner.in_channels, img_shape, img_shape, device = device, dtype = dtype)
         model_for_measure.eval()
         bo.export_qonnx(model_for_measure, ref_input, export_path = 'model.onnx', keep_initializers_as_inputs = True, opset_version = 11)
-        model = ModelWrapper('model.onnx')
-        graph = model.graph
-        for node in graph.node:
-            if node.op_type in ["Quant", "BinaryQuant", "Trunc"] and "weight_quant" in node.name:
-                for attribute in node.attribute:
-                    if attribute.name == "signed":
-                        attribute.i = 1
-                    elif attribute.name == "narrow":
-                        attribute.i = 0
-
-        model.save('model.onnx')
     
         # Transformations
         streamline_function = streamline_functions[self.args.model_name]

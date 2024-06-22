@@ -3,6 +3,7 @@ import torch.nn as nn
 
 import brevitas.nn as qnn
 from brevitas.core.scaling.standalone import ParameterFromStatsFromParameterScaling
+from brevitas.core.scaling import ParameterScaling
 from brevitas.quant.scaled_int import Int16Bias, Int32Bias, Int8ActPerTensorFloat, Int8WeightPerTensorFloat
 from brevitas.nn.quant_layer import QuantWeightBiasInputOutputLayer as QuantWBIOL
 from brevitas.nn.quant_mha import QuantMultiheadAttention
@@ -115,12 +116,12 @@ class Quantizer(object):
         sym_act_quant = sym_act_quant.let(**act_bit_width_dict)
         per_tensor_act_quant = per_tensor_act_quant.let(**act_bit_width_dict)
 
-        from brevitas.core.scaling import ParameterScaling
+
 
         weight_quant = weight_quant.let(
             **{
                 'high_percentile_q': 99.999, 'dtype' : torch.float32,
-                'scaling_impl' : ParameterScaling(scaling_init=0.1)
+                #'scaling_impl' : ParameterScaling(scaling_init=0.1)
             }
         )
 
@@ -147,10 +148,10 @@ class Quantizer(object):
         quant_wbiol_kwargs = {
             **weight_quant_dict,
             'dtype': torch.float32,
-            'return_quant_tensor': False,
+            'return_quant_tensor': True,
             'bias_quant' : bias_quant,
             'weight_signed' : True,
-            'weight_narrow_range' : False
+            'weight_narrow_range' : True
         }
 
         quant_mha_kwargs = {
@@ -257,11 +258,11 @@ class Quantizer(object):
                         model):
 
         # Input quantizer fixed at 8 bits
-        input_quantizer = (qnn.QuantIdentity, {'act_quant' : Int8ActPerTensorFloat,
+        input_quantizer = (qnn.QuantIdentity, {'act_quant' : Int8ActPerTensorFloatMinMaxInit,
                                                'bit_width' : 8,
                                                'narrow_range' : False,
-                                               'min_value' : 0.0,
-                                               'max_value' : 1.0,
+                                               'min_val' : 0.0,
+                                               'max_val' : 1.0,
                                                'return_quant_tensor' : True})
         
         model = inp_placeholder_handler(model, input_quantizer)
@@ -358,12 +359,6 @@ class Quantizer(object):
                         # for output quant, keep it to 8 bits
                         output_quant_identity_map = deepcopy(quant_identity_map)
                         
-                        '''
-                        for n in node.users:
-                            if n.op == 'output':
-                                output_quant_identity_map = {'signed': (qnn.QuantIdentity, {'act_quant': Int8ActPerTensorFloat, 'return_quant_tensor': True, 'bit_width': 8}), 
-                                                            'unsigned': (qnn.QuantIdentity, {'act_quant': Int8ActPerTensorFloat, 'return_quant_tensor': True, 'signed': False, 'bit_width' : 8})
-                        '''
                         is_output = False
                         for n in node.users:
                             if n.op == 'output':
@@ -395,8 +390,11 @@ class Quantizer(object):
                         quant_module_class, quant_module_kwargs = deepcopy(layer_map[type(module)])
                         quant_module_kwargs['weight_bit_width'] = weight_bit_width 
 
-               #         if weight_bit_width == 1:
-                #            quant_module_kwargs['weight_signed'] = False
+                        if weight_bit_width == 1:
+                            quant_module_kwargs['scaling_impl'] = ParameterScaling(scaling_init=0.1)
+                            quant_module_kwargs['weight_narrow_range'] = False
+                        else:
+                            quant_module_kwargs['scaling_impl'] = ScalingImplType.STATS
                             
                         if module.bias is not None:
                             quant_module_kwargs['bias_quant'] = deepcopy(self.bias_quant)

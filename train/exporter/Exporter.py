@@ -143,9 +143,9 @@ def qonnx_to_finn(model):
 	if q_count == 0:
 		return model
 	
-	model = cleanup_model(model)
 	model = model.transform(GiveUniqueNodeNames())
 	model = model.transform(GiveReadableTensorNames())
+	model = cleanup_model(model)
 	model = model.transform(
 		ConvertQONNXtoFINN(
 			filter_function = default_filter_function_generator(

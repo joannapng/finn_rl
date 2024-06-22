@@ -209,15 +209,16 @@ def specialize_layers(model: ModelWrapper, cfg: build.DataflowBuildConfig):
 	return model
 
 def qonnx_to_finn(model: ModelWrapper, cfg: build.DataflowBuildConfig):
+	model = tidy_up(model)
 	q_count = 0
 	for op_type in ["BinaryQuant", "Quant", "Trunc"]:
 		q_count += len(model.get_nodes_by_op_type(op_type))
 	if q_count == 0:
 		return model
 	
-	model = cleanup_model(model)
 	model = model.transform(GiveUniqueNodeNames())
 	model = model.transform(GiveReadableTensorNames())
+	model = cleanup_model(model)
 	model = model.transform(
 		ConvertQONNXtoFINN(
 			filter_function = default_filter_function_generator(
@@ -227,11 +228,11 @@ def qonnx_to_finn(model: ModelWrapper, cfg: build.DataflowBuildConfig):
 	)
 
 	model = model.transform(InferDataTypes())
-	# Convert AvgPool -> Mul -> Trunc structure to QuantAvgPool2d
-	model = model.transform(AvgPoolAndTruncToQuantAvgPool())
-	# Remove empty padding if it exists
-	model = model.transform(RemoveIdentityOps())
+	model = model.transform(InferDataLayouts())
 
+	if VerificationStepType.QONNX_TO_FINN_PYTHON in cfg._resolve_verification_steps():
+		verify_step(model, cfg, "qonnx_to_finn_python", need_parent=False)
+	
 	return model
 
 def streamline_lenet(model: ModelWrapper, cfg: build.DataflowBuildConfig):
@@ -329,7 +330,7 @@ def convert_to_hw_resnet(model: ModelWrapper, cfg: build.DataflowBuildConfig):
 	model = model.transform(InferDataLayouts())
 	model = model.transform(convert.InferLabelSelectLayer())
 
-	model = tidy_up(model)
+	model = tidy_up(model, cfg)
 	model = model.transform(convert.InferAddStreamsLayer())
 	model = model.transform(convert.InferDuplicateStreamsLayer())
 
@@ -345,6 +346,7 @@ def convert_to_hw_lenet(model: ModelWrapper, cfg: build.DataflowBuildConfig):
 	model = model.transform(RoundAndClipThresholds())
 	model = model.transform(convert.InferBinaryMatrixVectorActivation())
 	model = model.transform(convert.InferQuantizedMatrixVectorActivation())
+	model = model.transform(absorb.AbsorbAddIntoMultiThreshold())
 	model = model.transform(absorb.AbsorbTransposeIntoMultiThreshold())
 	model = model.transform(absorb.AbsorbConsecutiveTransposes())
 
