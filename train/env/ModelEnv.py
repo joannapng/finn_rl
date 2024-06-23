@@ -327,7 +327,7 @@ class ModelEnv(gym.Env):
             img_shape = self.model_config['center_crop_shape']
             device, dtype = next(model_for_measure.parameters()).device, next(model_for_measure.parameters()).dtype
             ref_input = torch.randn(1, self.finetuner.in_channels, img_shape, img_shape, device = device, dtype = dtype)
-            bo.export_qonnx(model_for_measure, ref_input, export_path = 'model.onnx', keep_initializers_as_inputs = True, opset_version = 11, verbose = False, disable_warnings = False)
+            bo.export_qonnx(model_for_measure, ref_input, export_path = 'model.onnx', keep_initializers_as_inputs = True, opset_version = 11, verbose = False, disable_warnings = True)
 
             # Transformations
             streamline_function = streamline_functions[self.args.model_name]
@@ -387,7 +387,7 @@ class ModelEnv(gym.Env):
         device, dtype = next(model_for_measure.parameters()).device, next(model_for_measure.parameters()).dtype
         ref_input = torch.randn(1, self.finetuner.in_channels, img_shape, img_shape, device = device, dtype = dtype)
         model_for_measure.eval()
-        bo.export_qonnx(model_for_measure, ref_input, export_path = 'model.onnx', keep_initializers_as_inputs = True, opset_version = 11)
+        bo.export_qonnx(model_for_measure, ref_input, export_path = 'model.onnx', keep_initializers_as_inputs = True, verbose = False, opset_version = 11)
     
         # Transformations
         streamline_function = streamline_functions[self.args.model_name]

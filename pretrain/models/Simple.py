@@ -18,6 +18,7 @@ class Simple(nn.Module):
 		self.name = "Simple"
 
 	def forward(self, x):
+		x = 2.0 * x - 1.0
 
 		for mod in self.conv_features:
 			x = mod(x)

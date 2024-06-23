@@ -72,7 +72,6 @@ import finn.transformation.streamline.collapse_repeated as collapse
 import finn.transformation.streamline.reorder as reorder
 from finn.analysis.fpgadataflow.op_and_param_counts import aggregate_dict_keys
 from finn.builder.build_dataflow_config import LargeFIFOMemStyle
-from samo.model import network
 from train.exporter.utils import (
 	isFeasible,
 	set_defaults,
@@ -93,11 +92,7 @@ from finn.transformation.qonnx.quant_act_to_multithreshold import (
 	default_filter_function_generator,
 )
 
-from samo.backend.finn import parser
-from samo.backend.finn.export import export
-from samo.optimiser.annealing import SimulatedAnnealing
-
-platform_path = './platforms'
+platform_path = 'platforms'
 platform_files = {}
 platform_files['U250'] = f'{platform_path}/u250.json'
 

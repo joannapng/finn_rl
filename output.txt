@@ -1,4 +1,0 @@
-Using GPU device
-Loading model from checkpoints/LeNet5_226d8200-054c-4a23-bfd2-3b8620bf4c7b/checkpoints/LeNet5_best.tar
-[None, None, None, None, Conv2d(1, 6, kernel_size=(5, 5), stride=(1, 1), padding=(2, 2)), Conv2d(6, 16, kernel_size=(5, 5), stride=(1, 1)), Linear(in_features=400, out_features=120, bias=False), Linear(in_features=120, out_features=84, bias=False), Linear(in_features=84, out_features=10, bias=False)]
-=> Original Accuracy: 98.683%

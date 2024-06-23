@@ -138,14 +138,6 @@ from finn.transformation.qonnx.quant_act_to_multithreshold import (
     default_filter_function_generator,
 )
 
-from samo.backend.finn import parser
-from samo.backend.finn import export as exporter
-from samo.optimiser.annealing import SimulatedAnnealing
-
-platform_files_path = 'samo/platforms'
-platform_files = {
-	"U250" : f'{platform_files_path}/u250_4slr.json'
-}
 
 def tidy_up(model):
 	"""Run the tidy-up step on given model. This includes shape and datatype
@@ -257,6 +249,8 @@ def qonnx_to_finn(model: ModelWrapper, cfg: build.DataflowBuildConfig):
 	model = model.transform(AvgPoolAndTruncToQuantAvgPool())
 	# Remove empty padding if it exists
 	model = model.transform(RemoveIdentityOps())
+	model = model.transform(GiveUniqueNodeNames())
+	model = model.transform(GiveReadableTensorNames())
 
 	if VerificationStepType.QONNX_TO_FINN_PYTHON in cfg._resolve_verification_steps():
 		verify_step(model, cfg, "qonnx_to_finn_python", need_parent=False)

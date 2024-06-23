@@ -4,7 +4,7 @@ import torch.nn as nn
 import brevitas.nn as qnn
 from brevitas.core.scaling.standalone import ParameterFromStatsFromParameterScaling
 from brevitas.core.scaling import ParameterScaling
-from brevitas.quant.scaled_int import Int16Bias, Int32Bias, Int8ActPerTensorFloat, Int8WeightPerTensorFloat
+from brevitas.quant.scaled_int import Int16Bias, Int32Bias, Int8ActPerTensorFloat, Int8WeightPerTensorFloat, Uint8ActPerTensorFloat
 from brevitas.nn.quant_layer import QuantWeightBiasInputOutputLayer as QuantWBIOL
 from brevitas.nn.quant_mha import QuantMultiheadAttention
 from brevitas import config
@@ -258,14 +258,21 @@ class Quantizer(object):
                         model):
 
         # Input quantizer fixed at 8 bits
-        input_quantizer = (qnn.QuantIdentity, {'act_quant' : Int8ActPerTensorFloatMinMaxInit,
-                                               'bit_width' : 8,
-                                               'narrow_range' : False,
-                                               'min_val' : 0.0,
-                                               'max_val' : 1.0,
-                                               'return_quant_tensor' : True})
-        
-        model = inp_placeholder_handler(model, input_quantizer)
+        rewriters = []
+        graph = model.graph
+        for node in graph.nodes:
+            if node.name == "sub":
+                input_quantizer = ( qnn.QuantIdentity, {'act_quant' : Int8ActPerTensorFloat,
+                                    'bit_width' : 8,
+                                    'return_quant_tensor' : True})
+                act_quant, kwargs_act_quant = input_quantizer
+                inp_quant = act_quant(**kwargs_act_quant)
+                name = node.name + '_quant'
+                model.add_module(name, inp_quant)
+                rewriters.append(InsertModuleCallAfter(name, node))
+                
+        for rewriter in rewriters:
+            model = rewriter.apply(model)
         return model
 
     def quantize_act(self,
