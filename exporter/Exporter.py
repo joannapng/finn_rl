@@ -436,8 +436,3 @@ def name_nodes(model: ModelWrapper, cfg: build.DataflowBuildConfig):
 	model = model.transform(GiveReadableTensorNames())
 
 	return model
-
-def apply_folding_config(model: ModelWrapper, cfg: build.DataflowBuildConfig):
-	model = model.transform(GiveUniqueNodeNames())
-	model = model.transform(ApplyConfig(cfg.folding_config_file))
-	return model

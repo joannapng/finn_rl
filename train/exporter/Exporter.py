@@ -1,10 +1,6 @@
-from matplotlib.style import available
-import torch
-import torch
-import numpy as np
+import os
 import json
-import time
-from copy import deepcopy
+import torch
 
 from qonnx.core.modelwrapper import ModelWrapper
 from qonnx.custom_op.registry import getCustomOp
@@ -46,7 +42,6 @@ from brevitas.onnx import export_qonnx
 from finn.transformation.fpgadataflow import convert_to_hw_layers as convert
 from qonnx.transformation.lower_convs_to_matmul import LowerConvsToMatMul
 from finn.transformation.streamline.round_thresholds import RoundAndClipThresholds
-from finn.transformation.fpgadataflow.set_folding import SetFolding
 from finn.transformation.fpgadataflow.specialize_layers import SpecializeLayers
 from finn.transformation.fpgadataflow.minimize_accumulator_width import (
 	MinimizeAccumulatorWidth,
@@ -56,39 +51,21 @@ from finn.transformation.fpgadataflow.minimize_weight_bit_width import (
 )
 from finn.analysis.fpgadataflow.res_estimation import (
 	res_estimation,
-	res_estimation_complete,
 )
-from finn.transformation.fpgadataflow.set_fifo_depths import (
-	InsertAndSetFIFODepths,
-	RemoveShallowFIFOs,
-	SplitLargeFIFOs,
-)
-
-from finn.transformation.fpgadataflow.insert_dwc import InsertDWC
-from finn.transformation.fpgadataflow.insert_fifo import InsertFIFO
 
 from qonnx.transformation.general import ConvertSubToAdd, ConvertDivToMul
 import finn.transformation.streamline.collapse_repeated as collapse
 import finn.transformation.streamline.reorder as reorder
 from finn.analysis.fpgadataflow.op_and_param_counts import aggregate_dict_keys
-from finn.builder.build_dataflow_config import LargeFIFOMemStyle
+
 from train.exporter.utils import (
-	isFeasible,
 	set_defaults,
 	folding,
-	estimate_resources
 )
 
 from qonnx.transformation.infer_datatypes import InferDataTypes
-from qonnx.transformation.quant_constant_folding import FoldTransposeIntoQuantInit
-from qonnx.transformation.remove import RemoveIdentityOps
 
-from finn.transformation.qonnx.fold_quant_weights import FoldQuantWeights
-from finn.transformation.qonnx.infer_quant_avg_pool_2d import (
-	AvgPoolAndTruncToQuantAvgPool,
-)
 from finn.transformation.qonnx.quant_act_to_multithreshold import (
-	ConvertQuantActToMultiThreshold,
 	default_filter_function_generator,
 )
 
@@ -170,7 +147,7 @@ def specialize_layers(model, fpga_part):
 	model = model.transform(InferDataTypes())
 	return model
 
-def set_folding(model, board):
+def set_folding(model, output_dir, board):
 	model = model.transform(GiveUniqueNodeNames())
 	model = model.transform(GiveReadableTensorNames())
 
@@ -178,10 +155,10 @@ def set_folding(model, board):
 	f = open(platform_files[board], 'r')
 	available_resources = json.load(f)['resources']
 	
-	model, max_cycles, avg_util, max_util, feasible = folding(model, available_resources)
+	model, max_cycles, avg_util, feasible = folding(model, available_resources)
 
 	if not feasible:
-		return model, 1000000, avg_util, max_util
+		return model, 1000000, avg_util
 	else:
 		hw_attrs = [
 		"PE",
@@ -197,49 +174,13 @@ def set_folding(model, board):
 		"outFIFODepths"
 		]
 
-		extract_model_config_to_json(model, "auto_folding_config.json", hw_attrs)
-		return model, max_cycles, avg_util, max_util
-
-def apply_folding_config(model):
-	model = model.transform(GiveUniqueNodeNames())
-	model = model.transform(ApplyConfig("auto_folding_config.json"))
-
-	return model
+		extract_model_config_to_json(model, os.path.join(output_dir, "folding_config.json"), hw_attrs)
+		return model, max_cycles, avg_util
 
 def minimize_bit_width(model):
 	model = model.transform(MinimizeWeightBitWidth())
 	model = model.transform(MinimizeAccumulatorWidth())
 	model = model.transform(InferDataTypes())
-
-	return model
-
-def set_fifo_depths(model):
-	extw_optypes = ["MVAU_hls", "MVAU_rtl", "VVAU_hls", "VVAU_rtl"]
-
-	model = model.transform(GiveUniqueNodeNames())
-	model = model.transform(GiveReadableTensorNames())
-
-	for node in model.graph.node:
-		op_type = node.op_type
-
-		node = getCustomOp(node)
-		ifd = node.get_nodeattr("inFIFODepths")
-		ofd = node.get_nodeattr("outFIFODepths")
-
-		for i in range(len(ifd)):
-			ifd[i] = np.prod(node.get_folded_input_shape(i)[:-1])
-			
-		for o in range(len(ofd)):
-			ofd[o] = np.prod(node.get_folded_output_shape(o)[:-1])
-			
-		node.set_nodeattr("inFIFODepths", ifd)
-		node.set_nodeattr("outFIFODepths", ofd)
-
-	model = model.transform(InsertDWC())
-	model = model.transform(InsertFIFO(create_shallow_fifos = True))
-		
-	model = model.transform(GiveUniqueNodeNames())
-	model = model.transform(GiveReadableTensorNames())
 
 	return model
 

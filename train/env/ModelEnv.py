@@ -1,24 +1,26 @@
 import copy
 import math
-import platform
-import json
-from venv import create
-import gymnasium as gym
 import torch
-import torch.nn as nn
 import numpy as np
+import torch.nn as nn
 from enum import IntEnum
+from copy import deepcopy
 
+import brevitas.nn as qnn
+import brevitas.export as bo
 from brevitas.graph.utils import get_module
 from brevitas.graph.quantize import preprocess_for_quantize
-import brevitas.nn as qnn
-from urllib3 import disable_warnings
+
+from qonnx.core.modelwrapper import ModelWrapper
+
+import gymnasium as gym
+from gymnasium import spaces
 
 from ..quantizer import Quantizer
 from ..finetune import Finetuner
 from ..exporter.Exporter import (
-    set_fifo_depths,
     tidy_up,
+    name_nodes,
     preprocessing,
     postprocessing,
     make_input_channels_last,
@@ -26,25 +28,15 @@ from ..exporter.Exporter import (
     create_dataflow_partition,
     specialize_layers,
     set_folding,
-    apply_folding_config,
-    minimize_bit_width,
-    resource_estimates,
     streamline_resnet,
     convert_to_hw_resnet,
-    name_nodes,
     streamline_lenet,
     streamline_simple,
     convert_to_hw_simple,
     convert_to_hw_lenet
 )
+
 from ..utils import measure_model
-
-from gymnasium import spaces
-from stable_baselines3.common.env_checker import check_env
-
-import brevitas.export as bo
-from qonnx.core.modelwrapper import ModelWrapper
-from copy import deepcopy
 
 platform_path = './platforms'
 platform_files = {}
@@ -69,7 +61,6 @@ convert_to_hw_functions = {
     'resnet152' : convert_to_hw_resnet,
     'Simple' : convert_to_hw_simple
 }
-
 
 class LayerTypes(IntEnum):
     LINEAR = 0
@@ -132,21 +123,18 @@ class ModelEnv(gym.Env):
         self.index_to_quantize = self.quantizable_idx[self.cur_ind]
 
         self.quantizer = Quantizer(
-            self.model,
             args.weight_bit_width,
             args.act_bit_width,
-            args.bias_bit_width
         )
     
         self.orig_acc = self.finetuner.orig_acc
         self.max_fps = 0.0
         self.max_acc = 0.0
 
-        print('=> Original Accuracy: {:.3f}%'.format(self.orig_acc * 100))
+        print('Original Accuracy: {:.3f}%'.format(self.orig_acc * 100))
 
         # find maximum fps (minimum bitwidth in all layers and maximum folding
         self.maximum_fps()
-
 
     def build_state_embedding(self):
         self.model = preprocess_for_quantize(self.model)
@@ -168,7 +156,7 @@ class ModelEnv(gym.Env):
                 if type(module) in self.quantizable_acts:
                     self.quantizable_idx.append(i)
 
-                    # for activations, increase by 1 the minimum bit
+                    # for activations, increase by 1 the minimum bit (activations should be at least 2 bits, so that 0 is represented (padding for conv))
                     if self.min_bit == 1:
                         self.bound_list.append((self.min_bit + 1, self.max_bit))
                     else:
@@ -246,11 +234,10 @@ class ModelEnv(gym.Env):
         self.strategy = []
 
         obs = self.layer_embedding[0].copy()
+        # reinitialize quantizer to be sure
         self.quantizer = Quantizer(
-            self.model,
             self.args.weight_bit_width,
             self.args.act_bit_width,
-            self.args.bias_bit_width
         )
         return obs, {}
 
@@ -258,9 +245,9 @@ class ModelEnv(gym.Env):
         action = self.get_action(action)
         self.last_action = action
         self.strategy.append(self.last_action)
+
         if self.is_final_layer():
-            print(self.strategy)
-        
+            print("Strategy: " + str(self.strategy))        
             fps, avg_util = self.final_action_wall()
             self.model = self.quantizer.quantize_model(self.model,
                                             self.strategy,
@@ -271,7 +258,7 @@ class ModelEnv(gym.Env):
             self.finetuner.model.to(self.finetuner.device)
             self.finetuner.calibrate()
 
-            # finetuner model
+            # finetune model
             self.finetuner.init_finetuning_optim()
             self.finetuner.init_loss()
             self.finetuner.finetune()
@@ -303,6 +290,7 @@ class ModelEnv(gym.Env):
         return obs, reward, done, False, info
     
     def reward(self, acc):
+        # reward should be within [-1, 1]
         return acc * 0.02 - 1.0
         
     def get_action(self, action):
@@ -322,14 +310,15 @@ class ModelEnv(gym.Env):
                                                             self.strategy,
                                                             self.quantizable_idx,
                                                             self.num_quant_acts)
-            # export model to qonnx
             model_for_measure.eval()
+            
+            # Export model to qonnx first
             img_shape = self.model_config['center_crop_shape']
             device, dtype = next(model_for_measure.parameters()).device, next(model_for_measure.parameters()).dtype
             ref_input = torch.randn(1, self.finetuner.in_channels, img_shape, img_shape, device = device, dtype = dtype)
-            bo.export_qonnx(model_for_measure, ref_input, export_path = 'model.onnx', keep_initializers_as_inputs = True, opset_version = 11, verbose = False, disable_warnings = True)
+            bo.export_qonnx(model_for_measure, ref_input, export_path = 'model.onnx', keep_initializers_as_inputs = True, opset_version = 11)
 
-            # Transformations
+            # Choose streamlining and hw function depending on model
             streamline_function = streamline_functions[self.args.model_name]
             convert_to_hw_function = convert_to_hw_functions[self.args.model_name]
 
@@ -344,12 +333,13 @@ class ModelEnv(gym.Env):
             model = convert_to_hw_function(model)
             model = create_dataflow_partition(model)
             model = specialize_layers(model, self.args.fpga_part)
-            model, cycles, avg_util, max_util = set_folding(model, self.args.board)
+            model, cycles, avg_util = set_folding(model, self.args.output_dir, self.args.board)
 
             fps = self.args.freq * 10**6 / cycles
 
             print(f'Achieved fps: {fps}')
             if fps >= self.args.target_fps:
+                print(f'Achieved desired fps')
                 break
             else:
                 freq = cycles * self.args.target_fps / 10**6
@@ -360,7 +350,7 @@ class ModelEnv(gym.Env):
                 print(f'Target fps not achieved (achieved fps: {fps})')
                 
                 # reduce bitwidth in the hopes that maximum fps is achieved, start from the back
-                # where the layers typically have more neurons
+                # where the layers typically have more neurons (should be changed to reducing bitwidth of bottleneck layer)
                 reduced = False
                 for idx in range(len(self.strategy) - 1, -1, -1):
                     bit = self.strategy[idx]
@@ -382,6 +372,8 @@ class ModelEnv(gym.Env):
                                                         strategy,
                                                         self.quantizable_idx,
                                                         self.num_quant_acts)
+        model_for_measure.eval()
+
         # export model to qonnx
         img_shape = self.model_config['center_crop_shape']
         device, dtype = next(model_for_measure.parameters()).device, next(model_for_measure.parameters()).dtype
@@ -389,7 +381,7 @@ class ModelEnv(gym.Env):
         model_for_measure.eval()
         bo.export_qonnx(model_for_measure, ref_input, export_path = 'model.onnx', keep_initializers_as_inputs = True, verbose = False, opset_version = 11)
     
-        # Transformations
+        # Choose streamlining and hw function
         streamline_function = streamline_functions[self.args.model_name]
         convert_to_hw_function = convert_to_hw_functions[self.args.model_name]
         
@@ -404,11 +396,11 @@ class ModelEnv(gym.Env):
         model = convert_to_hw_function(model)
         model = create_dataflow_partition(model)
         model = specialize_layers(model, self.args.fpga_part)
-        model, cycles, _, _ = set_folding(model, self.args.board)
+        model, cycles, _ = set_folding(model, self.args.output_dir, self.args.board)
         fps = self.args.freq * 10**6 / cycles
 
-        print(f'=> Maximum achievable fps at {self.args.freq} MHz: {fps} fps')
+        print(f'Maximum achievable fps at {self.args.freq} MHz: {fps} fps')
         
         if fps < self.args.target_fps:
-            print(f'=> Target fps not achievable, changing target fps from {self.args.target_fps} to {fps}')
+            print(f'Target fps not achievable, changing target fps from {self.args.target_fps} to {fps}')
             self.args.target_fps = fps

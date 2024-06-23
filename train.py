@@ -1,3 +1,4 @@
+import os
 import torch
 import random
 import argparse
@@ -9,6 +10,7 @@ from pretrain.utils import get_model_config
 from stable_baselines3 import A2C, DDPG, PPO, SAC, TD3
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.noise import NormalActionNoise
+from stable_baselines3.common.callbacks import CheckpointCallback
 from train.callbacks.StopTrainingOnNoImprovementCallback import StopTrainingOnNoImprovementCallback
 
 from finn.util.basic import part_map
@@ -62,45 +64,51 @@ parser.add_argument('--min-bit', type=int, default=1, help = 'Minimum bit width 
 parser.add_argument('--max-bit', type=int, default=8, help = 'Maximum bit width (default: 8)')
 
 # Agent Parameters
-parser.add_argument('--agent', default = 'TD3', choices = ['A2C', 'DDPG', 'PPO', 'SAC', 'TD3', 'None'], help = 'Choose algorithm to train agent')
-parser.add_argument('--noise', default = 0.1, type = float, help = 'Std for added noise in agent')
-parser.add_argument('--num-episodes', default = 500, type = int, help = 'Number of episodes (passes over the entire network) to train the agent for')
-parser.add_argument('--log-every', default = 10, type = int, help = 'How many episodes to wait to log agent')
-parser.add_argument('--output', default='./logs', type=str, help='')
-parser.add_argument('--seed', default = 234, type = int, help = 'Seed to reproduce')
+parser.add_argument('--agent', default = 'TD3', choices = ['A2C', 'DDPG', 'PPO', 'SAC', 'TD3'], help = 'Choose algorithm to train agent (default: TD3)')
+parser.add_argument('--noise', default = 0.1, type = float, help = 'Std for added noise in agent (default: 0.1)')
+parser.add_argument('--num-episodes', default = 500, type = int, help = 'Number of episodes to train the agent for (default: 500)')
+parser.add_argument('--log-every', default = 10, type = int, help = 'How many episodes to wait to log agent (default: 10)')
+parser.add_argument('--save-every', default = 10, type = int, help = 'How many episodes to wait to save agent checkpoint (default: 10)')
+parser.add_argument('--seed', default = 234, type = int, help = 'Seed to reproduce (default: 234)')
 
-### --- DESIGN --- ###
-parser.add_argument('--board', default = "U250", help = "Name of target board")
-parser.add_argument('--shell-flow-type', default = "vitis_alveo", choices = ["vivado_zynq", "vitis_alveo"], help = "Target shell type")
-parser.add_argument('--freq', type = float, default = 200.0, help = 'Frequency in MHz')
-parser.add_argument('--max-freq', type = float, default = 300.0, help = 'Maximum device frequency in MHz')
-parser.add_argument('--target-fps', default = 6000, type = float, help = 'Target fps when target is accuracy')
-
+# Design Parameters
+parser.add_argument('--board', default = "U250", help = "Name of target board (default: U250)")
+parser.add_argument('--shell-flow-type', default = "vitis_alveo", choices = ["vivado_zynq", "vitis_alveo"], help = "Target shell type (default: vitis_alveo)")
+parser.add_argument('--freq', type = float, default = 200.0, help = 'Frequency in MHz (default: 200)')
+parser.add_argument('--max-freq', type = float, default = 300.0, help = 'Maximum device frequency in MHz (default: 300)')
+parser.add_argument('--target-fps', default = 6000, type = float, help = 'Target fps (default: 6000)')
 
 def main():
     args = parser.parse_args()
+
     # set seed to reproduce
     random.seed(args.seed)
     torch.manual_seed(args.seed)
+
     if args.device == 'GPU' and torch.cuda.is_available():
         torch.cuda.manual_seed_all(args.seed)
     
     args.fpga_part = part_map[args.board]
+    args.output_dir = args.model_name
 
     env = Monitor(
-        ModelEnv(args, get_model_config(args.model_name, args.dataset)),
+        ModelEnv(args, get_model_config(args.dataset)),
         filename = 'monitor.csv',
         info_keywords=('accuracy', 'fps', 'avg_util', 'strategy')
     )
+
     n_actions = env.action_space.shape[-1]
-    
     action_noise = NormalActionNoise(mean=np.zeros(n_actions), sigma=args.noise * np.ones(n_actions))
-    agent = rl_algorithms[args.agent]("MlpPolicy", env, action_noise = action_noise, verbose = 1, seed = 6)
+
+    agent = rl_algorithms[args.agent]("MlpPolicy", env, action_noise = action_noise, verbose = 1, seed = args.seed)
     
+    # check every log_every episodes for improvement and if after 3 checks the model has not progressed, end training
     stop_train_callback = StopTrainingOnNoImprovementCallback(check_freq=len(env.quantizable_idx) * args.log_every, patience = 3)
+    checkpoint_callback = CheckpointCallback(save_freq = args.save_every * len(env.quantizable_idx), save_path = 'agents', name_prefix = f'agent_{args.model_name}') 
     agent.learn(total_timesteps=len(env.quantizable_idx) * args.num_episodes, 
-                log_interval=args.log_every)
-    agent.save(f'agents/agent_{args.model_name  }')
+                log_interval=args.log_every,
+                callback = [stop_train_callback, checkpoint_callback])
+    agent.save(f'agents/agent_{args.model_name }')
     
 if __name__ == "__main__":
     main()

@@ -27,7 +27,7 @@ parser.add_argument('--board', default = "U250", help = "Name of target board")
 parser.add_argument('--shell-flow-type', default = "vitis_alveo", choices = ["vivado_zynq", "vitis_alveo"], help = "Target shell type")
 parser.add_argument('--input-file', default = 'input.npy', type = str, help = 'Input file for validation')
 parser.add_argument('--expected-output-file', default = 'expected_output.npy', type = str, help = 'Output file for validation')
-parser.add_argument('--folding-config-file', default = 'auto_folding_config.json', type = str, help = 'Folding config file')
+parser.add_argument('--folding-config-file', default = 'folding_config.json', type = str, help = 'Folding config file')
 #parser.add_argument('--specialize-layers-config-file', default = 'specialize_layers_config.json', type = str, help = 'Specialize layers config')
 
 streamline_functions = {

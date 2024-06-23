@@ -387,7 +387,7 @@ def folding(model, available_resources):
 
 	if not feasible:
 		avg_util, max_util = avg_utilization(model, available_resources)
-		return model, 0.0, avg_util, max_util, False
+		return model, 0.0, avg_util, False
 
 	while feasible:
 		cycles_per_layer = estimate_cycles(model)
@@ -395,7 +395,7 @@ def folding(model, available_resources):
 		bottleneck_layer, latency = sorted_cycles_per_layer[0]
 		model, increased = increase_folding(model, bottleneck_layer)
 
-		print(f'New latency = {latency} cycles')
+		print(f'New latency : {latency} cycles')
 		if not increased:
 			break
 
@@ -407,4 +407,4 @@ def folding(model, available_resources):
 	cycles_per_layer = estimate_cycles(model)
 	max_cycles = max(cycles_per_layer.items(), key = lambda x : x[1])[1]
 	avg_util, _ = avg_utilization(model, available_resources)
-	return model, max_cycles, avg_util, None, True
+	return model, max_cycles, avg_util, True

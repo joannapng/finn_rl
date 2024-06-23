@@ -1,51 +1,39 @@
-from copy import deepcopy
+import torch
 import torch.nn as nn
 
+from copy import deepcopy
+
 import brevitas.nn as qnn
-from brevitas.core.scaling.standalone import ParameterFromStatsFromParameterScaling
-from brevitas.core.scaling import ParameterScaling
-from brevitas.quant.scaled_int import Int16Bias, Int32Bias, Int8ActPerTensorFloat, Int8WeightPerTensorFloat, Uint8ActPerTensorFloat
-from brevitas.nn.quant_layer import QuantWeightBiasInputOutputLayer as QuantWBIOL
-from brevitas.nn.quant_mha import QuantMultiheadAttention
 from brevitas import config
+from brevitas.core.scaling import ParameterScaling
+from brevitas.nn.quant_layer import QuantWeightBiasInputOutputLayer as QuantWBIOL
 from brevitas.graph.utils import get_module
 from brevitas.graph.utils import del_module
-from brevitas.graph.quantize_impl import inp_placeholder_handler, add_output_quant_handler, residual_handler, output_quant_handler
+from brevitas.graph.quantize_impl import add_output_quant_handler, residual_handler, output_quant_handler
 from brevitas.graph.quantize_impl import are_inputs_quantized_and_aligned
+
 from brevitas.graph.base import InsertModuleCallAfter
-import torch
 from brevitas.graph.base import ModuleToModuleByInstance
 from brevitas.graph.base import ModuleInstanceToModuleInstance
 
-from brevitas.quant.scaled_int import Int8ActPerTensorFloat
-from brevitas.quant.scaled_int import Int8ActPerTensorFloatMinMaxInit, Uint8ActPerTensorFloatMaxInit
+from brevitas.quant.scaled_int import Int8Bias
 from brevitas.quant import Int8WeightPerTensorFloat
-from brevitas.quant.scaled_int import Int16Bias
-from brevitas.quant.scaled_int import Int32Bias
-from brevitas.quant.scaled_int import Int8Bias, Int8BiasPerTensorFloatInternalScaling
+from brevitas.quant.scaled_int import Int8ActPerTensorFloat
 
 from brevitas.graph.standardize import DisableLastReturnQuantTensor
 from brevitas.graph.quantize_impl import SIGN_PRESERVING_MODULES
 
 from train.quantizer.utils import align_input_quant
-from brevitas_examples.bnn_pynq.models.common import CommonActQuant, CommonWeightQuant
 from brevitas.core.scaling import ScalingImplType
 from brevitas.inject.enum import *
-from brevitas.core.zero_point import ZeroZeroPoint
-from brevitas.quant.solver import WeightQuantSolver, ActQuantSolver
 
-BIAS_BIT_WIDTH_MAP = {32: Int32Bias, 16: Int16Bias, 8: Int8BiasPerTensorFloatInternalScaling, None: None}
 UNSIGNED_ACT_TUPLE = (nn.ReLU, nn.ReLU6, nn.Sigmoid, nn.Hardsigmoid)
-
-
-    
+  
 class Quantizer(object):
     def __init__(
             self,
-            model,
             weight_bit_width,
             act_bit_width,
-            bias_bit_width,
     ):
         weight_bit_width_dict = {}
         act_bit_width_dict = {}
@@ -53,7 +41,7 @@ class Quantizer(object):
         act_bit_width_dict['act_bit_width'] = act_bit_width
 
         quant_layer_map, quant_act_map, quant_identity_map = self.create_quant_maps(
-            bias_bit_width = bias_bit_width,
+            bias_bit_width = 8,
             weight_bit_width = weight_bit_width,
             act_bit_width = act_bit_width
         )
@@ -87,7 +75,6 @@ class Quantizer(object):
             qnn.QuantConvTranspose2d
         ]
 
-
     def create_quant_maps(
             self,
             bias_bit_width,
@@ -98,12 +85,8 @@ class Quantizer(object):
         def kwargs_prefix(prefix, weight_kwargs):
             return {prefix + k: v for k, v in weight_kwargs.items()}
         
-        weight_bit_width_dict = {'bit_width' : 8}
+        weight_bit_width_dict = {'bit_width' : weight_bit_width}
         act_bit_width_dict = {'bit_width': act_bit_width}
-
-        self.bias_quant = BIAS_BIT_WIDTH_MAP[bias_bit_width] if bias_bit_width is not None else None
-        bias_quant = None
-        #print(bias_quant)
 
         weight_quant = Int8WeightPerTensorFloat
         weight_quant = weight_quant.let(**weight_bit_width_dict)
@@ -116,12 +99,9 @@ class Quantizer(object):
         sym_act_quant = sym_act_quant.let(**act_bit_width_dict)
         per_tensor_act_quant = per_tensor_act_quant.let(**act_bit_width_dict)
 
-
-
         weight_quant = weight_quant.let(
             **{
                 'high_percentile_q': 99.999, 'dtype' : torch.float32,
-                #'scaling_impl' : ParameterScaling(scaling_init=0.1)
             }
         )
 
@@ -149,7 +129,7 @@ class Quantizer(object):
             **weight_quant_dict,
             'dtype': torch.float32,
             'return_quant_tensor': True,
-            'bias_quant' : bias_quant,
+            'bias_quant' : None,
             'weight_signed' : True,
             'weight_narrow_range' : True
         }
@@ -158,14 +138,14 @@ class Quantizer(object):
             **kwargs_prefix('in_proj_', weight_quant_dict),
             **kwargs_prefix('out_proj_', weight_quant_dict),
             'in_proj_input_quant': None,
-            'in_proj_bias_quant': bias_quant,
+            'in_proj_bias_quant': None,
             'softmax_input_quant': None,
             'attn_output_weights_quant': sym_act_quant,
             'q_scaled_quant': sym_act_quant,
             'k_transposed_quant': sym_act_quant,
             'v_quant': sym_act_quant,
             'out_proj_input_quant': act_quant,
-            'out_proj_bias_quant': bias_quant,
+            'out_proj_bias_quant': None,
             'out_proj_output_quant': None,
             # activation equalization requires packed_in_proj
             # since it supports only self-attention
@@ -261,7 +241,7 @@ class Quantizer(object):
         rewriters = []
         graph = model.graph
         for node in graph.nodes:
-            if node.name == "sub":
+            if node.name == "sub": # after -1.0
                 input_quantizer = ( qnn.QuantIdentity, {'act_quant' : Int8ActPerTensorFloat,
                                     'bit_width' : 8,
                                     'return_quant_tensor' : True})
@@ -270,7 +250,7 @@ class Quantizer(object):
                 name = node.name + '_quant'
                 model.add_module(name, inp_quant)
                 rewriters.append(InsertModuleCallAfter(name, node))
-                
+
         for rewriter in rewriters:
             model = rewriter.apply(model)
         return model
@@ -285,7 +265,7 @@ class Quantizer(object):
         for i, node in enumerate(model.graph.nodes):
             if node.op == 'call_module' and i == act_idx:
                 module = get_module(model, node.target)
-                if isinstance(module, tuple(layer_map.keys())):       
+                if isinstance(module, tuple(layer_map.keys())):
                     
                     quant_module_class, quant_module_kwargs = deepcopy(layer_map[type(module)])
                     quant_module_kwargs['bit_width'] = act_bit_width
@@ -363,7 +343,6 @@ class Quantizer(object):
                                     quant_act_map=quant_act_map,
                                     unsigned_act_tuple=unsigned_act_tuple)
                     else:
-                        # for output quant, keep it to 8 bits
                         output_quant_identity_map = deepcopy(quant_identity_map)
                         
                         is_output = False
@@ -373,6 +352,7 @@ class Quantizer(object):
                                 break
                         
                         if is_output:
+                            # keep output quantization to 8 bits
                             output_quant_identity_map['signed'][1]['bit_width'] = 8
                             output_quant_identity_map['unsigned'][1]['bit_width'] = 8
                             output_quant_handler(
@@ -398,13 +378,15 @@ class Quantizer(object):
                         quant_module_kwargs['weight_bit_width'] = weight_bit_width 
 
                         if weight_bit_width == 1:
+                            # to avoid inf scale
                             quant_module_kwargs['scaling_impl'] = ParameterScaling(scaling_init=0.1)
                             quant_module_kwargs['weight_narrow_range'] = False
                         else:
                             quant_module_kwargs['scaling_impl'] = ScalingImplType.STATS
                             
                         if module.bias is not None:
-                            quant_module_kwargs['bias_quant'] = deepcopy(self.bias_quant)
+                            # add bias quant if the module has bias
+                            quant_module_kwargs['bias_quant'] = Int8Bias
                         else:
                             quant_module_kwargs['bias_quant'] = None
 
