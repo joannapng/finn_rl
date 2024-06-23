@@ -22,7 +22,7 @@ rl_algorithms = {
     'TD3': TD3
 }
 
-model_names = ['LeNet5', 'resnet18', 'resnet34', 'resnet50', 'resnet100', 'resnet152']
+model_names = ['LeNet5', 'resnet18', 'resnet34', 'resnet50', 'resnet100', 'resnet152', 'Simple']
 
 parser = argparse.ArgumentParser(description = 'Train RL Agent')
 

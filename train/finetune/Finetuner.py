@@ -20,13 +20,15 @@ from .validate import validate
 from .calibrate import calibrate
 from pretrain.models.LeNet5 import LeNet5
 from pretrain.models.resnet import ResNet18, ResNet34, ResNet50, ResNet101, ResNet152
+from pretrain.models.Simple import Simple
 
 networks = {'LeNet5' : LeNet5,
 			'resnet18' : ResNet18, 
 			'resnet34' : ResNet34,
 			'resnet50' : ResNet50,
 			'resnet101' : ResNet101,
-			'resnet152' : ResNet152}
+			'resnet152' : ResNet152,
+			'Simple' : Simple}
 
 class Finetuner(object):
 	def __init__(self, args, model_config):

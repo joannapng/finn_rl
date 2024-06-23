@@ -33,7 +33,7 @@ rl_algorithms = {
     'TD3': TD3
 }
 
-model_names = ['LeNet5', 'resnet18', 'resnet34', 'resnet50', 'resnet100', 'resnet152']
+model_names = ['LeNet5', 'resnet18', 'resnet34', 'resnet50', 'resnet100', 'resnet152', 'Simple']
 
 print(config.JIT_ENABLED)
 print(config.NATIVE_STE_BACKEND_ENABLED)
@@ -137,6 +137,7 @@ img_shape = center_crop_shape
 input_tensor_torch, _ = next(iter(env.finetuner.export_loader))
 input_tensor_numpy = input_tensor_torch.detach().cpu().numpy().astype(np.float32)
 input_tensor_numpy = np.transpose(input_tensor_numpy, (0, 2, 3, 1))
+input_tensor_torch = input_tensor_torch / 255.0
 np.save(f'{os.path.join(args.output_dir, "input.npy")}', input_tensor_numpy)
 
 output_golden = model.forward(input_tensor_torch.to(env.finetuner.device)).detach().cpu().numpy()
@@ -150,7 +151,7 @@ device, dtype = next(model.parameters()).device, next(model.parameters()).dtype
 ref_input = torch.randn(1, env.finetuner.in_channels, img_shape, img_shape, device = device, dtype = dtype)
 
 name = output + '_quant.onnx'
-bo.export_qonnx(model, input_t = ref_input, export_path = name, opset_version = 11, keep_initializers_as_inputs = True, disable_warnings = False, verbose = True)
+bo.export_qonnx(model, input_t = ref_input, export_path = name, opset_version = 11, keep_initializers_as_inputs = False)
 
 # export original model to onnx
 orig_model = env.orig_model

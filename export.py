@@ -36,7 +36,8 @@ streamline_functions = {
 	'resnet34' : streamline_resnet,
 	'resnet50' : streamline_resnet,
 	'resnet100' : streamline_resnet,
-	'resnet152' : streamline_resnet
+	'resnet152' : streamline_resnet,
+	'Simple' : streamline_lenet,
 }
 
 convert_to_hw_functions = {
@@ -45,7 +46,8 @@ convert_to_hw_functions = {
 	'resnet34' : convert_to_hw_resnet,
 	'resnet50' : convert_to_hw_resnet,
 	'resnet100' : convert_to_hw_resnet,
-	'resnet152' : convert_to_hw_resnet
+	'resnet152' : convert_to_hw_resnet,
+	'Simple' : convert_to_hw_lenet
 }
 
 def main():
@@ -103,7 +105,7 @@ def main():
 		],
 		verify_steps = [
 			build_cfg.VerificationStepType.QONNX_TO_FINN_PYTHON,
-			build_cfg.VerificationStepType.TIDY_UP_PYTHON,
+			#build_cfg.VerificationStepType.TIDY_UP_PYTHON,
 			build_cfg.VerificationStepType.STREAMLINED_PYTHON,
 			build_cfg.VerificationStepType.FOLDED_HLS_CPPSIM,
 			build_cfg.VerificationStepType.STITCHED_IP_RTLSIM

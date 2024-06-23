@@ -4,7 +4,7 @@ import argparse
 from pretrain.trainer import Trainer
 from pretrain.utils import get_model_config
 
-model_names = ['LeNet5', 'resnet18', 'resnet34', 'resnet50', 'resnet100', 'resnet152']
+model_names = ['LeNet5', 'resnet18', 'resnet34', 'resnet50', 'resnet100', 'resnet152', 'Simple']
 
 parser = argparse.ArgumentParser(description = 'Pretraining model parameters')
 

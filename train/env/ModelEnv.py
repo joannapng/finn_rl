@@ -33,6 +33,8 @@ from ..exporter.Exporter import (
     convert_to_hw_resnet,
     name_nodes,
     streamline_lenet,
+    streamline_simple,
+    convert_to_hw_simple,
     convert_to_hw_lenet
 )
 from ..utils import measure_model
@@ -54,7 +56,8 @@ streamline_functions = {
     'resnet34' : streamline_resnet,
     'resnet50' : streamline_resnet,
     'resnet100' : streamline_resnet,
-    'resnet152' : streamline_resnet
+    'resnet152' : streamline_resnet,
+    'Simple' : streamline_simple
 }
 
 convert_to_hw_functions = {
@@ -63,7 +66,8 @@ convert_to_hw_functions = {
     'resnet34' : convert_to_hw_resnet,
     'resnet50' : convert_to_hw_resnet,
     'resnet100' : convert_to_hw_resnet,
-    'resnet152' : convert_to_hw_resnet
+    'resnet152' : convert_to_hw_resnet,
+    'Simple' : convert_to_hw_simple
 }
 
 
@@ -398,7 +402,6 @@ class ModelEnv(gym.Env):
         model = streamline_function(model)
         model = name_nodes(model)
         model = convert_to_hw_function(model)
-        model.save("to_hw_model.onnx")
         model = create_dataflow_partition(model)
         model = specialize_layers(model, self.args.fpga_part)
         model, cycles, _, _ = set_folding(model, self.args.board)

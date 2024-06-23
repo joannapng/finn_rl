@@ -171,7 +171,7 @@ def preprocessing(model: ModelWrapper, cfg: build.DataflowBuildConfig):
 
 	model = model.transform(MergeONNXModels(preproc_model))
 	global_inp_name = model.graph.input[0].name
-	model.set_tensor_datatype(global_inp_name, DataType["INT8"])
+	model.set_tensor_datatype(global_inp_name, DataType["UINT8"])
 	model = tidy_up(model)
 
 	return model
@@ -209,26 +209,54 @@ def specialize_layers(model: ModelWrapper, cfg: build.DataflowBuildConfig):
 	return model
 
 def qonnx_to_finn(model: ModelWrapper, cfg: build.DataflowBuildConfig):
-	model = tidy_up(model)
 	q_count = 0
 	for op_type in ["BinaryQuant", "Quant", "Trunc"]:
 		q_count += len(model.get_nodes_by_op_type(op_type))
 	if q_count == 0:
 		return model
 	
-	model = model.transform(GiveUniqueNodeNames())
-	model = model.transform(GiveReadableTensorNames())
 	model = cleanup_model(model)
-	model = model.transform(
-		ConvertQONNXtoFINN(
-			filter_function = default_filter_function_generator(
-				max_multithreshold_bit_width = 8
-			)
-		)
+
+	from qonnx.transformation.base import Transformation
+	from qonnx.transformation.extract_conv_bias import ExtractBiasFromConv
+	from qonnx.transformation.gemm_to_matmul import GemmToMatMul
+	from qonnx.transformation.infer_datatypes import InferDataTypes
+	from qonnx.transformation.quant_constant_folding import FoldTransposeIntoQuantInit
+	from qonnx.transformation.remove import RemoveIdentityOps
+
+	from finn.transformation.qonnx.fold_quant_weights import FoldQuantWeights
+	from finn.transformation.qonnx.infer_quant_avg_pool_2d import (
+		AvgPoolAndTruncToQuantAvgPool,
+	)
+	from finn.transformation.qonnx.quant_act_to_multithreshold import (
+		ConvertQuantActToMultiThreshold,
+		default_filter_function_generator,
 	)
 
+	model = model.transform(ExtractBiasFromConv())
+	
+	# Gemm operations are not supported by FINN, so we convert them to MatMul
+	model = model.transform(GemmToMatMul())
+	model = model.transform(FoldTransposeIntoQuantInit())
+	
+	# Make sure the datatypes exist, these are required for folding the weights
 	model = model.transform(InferDataTypes())
-	model = model.transform(InferDataLayouts())
+	
+	# Fold weights
+	model = model.transform(FoldQuantWeights())
+	#if VerificationStepType.QONNX_TO_FINN_PYTHON in cfg._resolve_verification_steps():
+	#	verify_step(model, cfg, "qonnx_to_finn_python", need_parent=False)
+	
+	# Convert activations
+	model = model.transform(
+		ConvertQuantActToMultiThreshold()
+	)
+	# Recompute datatypes
+	model = model.transform(InferDataTypes())
+	# Convert AvgPool -> Mul -> Trunc structure to QuantAvgPool2d
+	model = model.transform(AvgPoolAndTruncToQuantAvgPool())
+	# Remove empty padding if it exists
+	model = model.transform(RemoveIdentityOps())
 
 	if VerificationStepType.QONNX_TO_FINN_PYTHON in cfg._resolve_verification_steps():
 		verify_step(model, cfg, "qonnx_to_finn_python", need_parent=False)
@@ -260,6 +288,26 @@ def streamline_lenet(model: ModelWrapper, cfg: build.DataflowBuildConfig):
 		model = model.transform(reorder.MoveScalarMulPastMatMul())
 		model = model.transform(absorb.AbsorbMulIntoMultiThreshold())
 
+	model = model.transform(absorb.AbsorbScalarMulAddIntoTopK())
+
+	return model
+
+def streamline_simple(model: ModelWrapper, cfg: build.DataflowBuildConfig):
+	model = model.transform(ConvertSubToAdd())
+	model = model.transform(ConvertDivToMul())
+
+	model = model.transform(collapse.CollapseRepeatedMul())
+	model = model.transform(absorb.AbsorbMulIntoMultiThreshold())
+	model = model.transform(absorb.AbsorbSignBiasIntoMultiThreshold())
+	model = model.transform(absorb.AbsorbAddIntoMultiThreshold())
+
+	model = model.transform(reorder.MoveScalarMulPastConv())
+	model = model.transform(absorb.AbsorbMulIntoMultiThreshold())
+	model = model.transform(collapse.CollapseRepeatedMul())
+	model = model.transform(reorder.MoveMulPastMaxPool())
+	model = model.transform(reorder.MoveScalarLinearPastInvariants())
+	model = model.transform(reorder.MoveScalarMulPastMatMul())
+	model = model.transform(absorb.AbsorbMulIntoMultiThreshold())
 	model = model.transform(absorb.AbsorbScalarMulAddIntoTopK())
 
 	return model
@@ -308,6 +356,7 @@ def convert_to_hw_resnet(model: ModelWrapper, cfg: build.DataflowBuildConfig):
 	model = model.transform(convert.InferChannelwiseLinearLayer())
 	model = model.transform(convert.InferConvInpGen())
 	model = model.transform(RoundAndClipThresholds())
+	model = model.transform(convert.InferVectorVectorActivation())
 	model = model.transform(convert.InferBinaryMatrixVectorActivation())
 	model = model.transform(convert.InferQuantizedMatrixVectorActivation())
 
@@ -338,12 +387,41 @@ def convert_to_hw_resnet(model: ModelWrapper, cfg: build.DataflowBuildConfig):
 
 	return model
 
+def convert_to_hw_simple(model: ModelWrapper, cfg: build.DataflowBuildConfig):
+	model = model.transform(InferDataLayouts())
+	model = model.transform(convert.InferPool())
+
+	model = model.transform(LowerConvsToMatMul())
+	model = model.transform(convert.InferConvInpGen())
+	model = model.transform(convert.InferVectorVectorActivation())
+	model = model.transform(convert.InferBinaryMatrixVectorActivation())
+	model = model.transform(convert.InferQuantizedMatrixVectorActivation())
+
+	model = model.transform(absorb.AbsorbAddIntoMultiThreshold())
+	model = model.transform(absorb.AbsorbTransposeIntoMultiThreshold())
+	model = model.transform(absorb.AbsorbConsecutiveTransposes())
+
+	model = model.transform(InferDataLayouts())
+	model = model.transform(convert.InferThresholdingLayer())
+
+	model = model.transform(InferDataLayouts())
+	model = model.transform(convert.InferLabelSelectLayer())
+
+	model = model.transform(InferDataLayouts())
+	model = model.transform(RemoveCNVtoFCFlatten())
+
+	model = model.transform(RoundAndClipThresholds())
+	model = tidy_up(model)
+
+	return model
+
 def convert_to_hw_lenet(model: ModelWrapper, cfg: build.DataflowBuildConfig):
 	model = model.transform(InferDataLayouts())
 	model = model.transform(convert.InferPool())
 	model = model.transform(LowerConvsToMatMul())
 	model = model.transform(convert.InferConvInpGen())
 	model = model.transform(RoundAndClipThresholds())
+	model = model.transform(convert.InferVectorVectorActivation())
 	model = model.transform(convert.InferBinaryMatrixVectorActivation())
 	model = model.transform(convert.InferQuantizedMatrixVectorActivation())
 	model = model.transform(absorb.AbsorbAddIntoMultiThreshold())
