@@ -1,20 +1,15 @@
-import numpy as np
 import random
 import torch
-import torchvision
 import torch.nn as nn
-import torch.nn.functional as F
-import uuid
-import os
-import copy
+import numpy as np
 
 import sys
 sys.path.append(".")
 
-from torch.utils.data import DataLoader, sampler, random_split
+from torch.utils.data import DataLoader, random_split
 from torchvision import transforms
 from torchvision.datasets import CIFAR10, MNIST
-import torchvision.models
+
 from .validate import validate
 from .calibrate import calibrate
 from pretrain.models.LeNet5 import LeNet5
@@ -33,7 +28,6 @@ class Finetuner(object):
 	def __init__(self, args, model_config):
 		self.args = args
 		
-		# set seed to reproduce
 		# Initialize device
 		self.device = None
 		self.init_device()
@@ -71,8 +65,6 @@ class Finetuner(object):
 
 	def init_dataset(self, args, config):
 		if args.dataset == 'CIFAR10':
-			normalize = transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
-
 			builder = CIFAR10
 			self.num_classes = 10
 			self.in_channels = 3
@@ -81,7 +73,6 @@ class Finetuner(object):
 				transforms.RandomCrop(32, padding = 4),
 				transforms.RandomHorizontalFlip(),
 				transforms.ToTensor(),
-				normalize
 			])
 
 			export_transformations = transforms.Compose([
@@ -91,8 +82,6 @@ class Finetuner(object):
 			])
 
 		elif args.dataset == 'MNIST':
-			normalize = transforms.Normalize(mean = (0.1307, ), std = (0.3081, ))
-
 			builder = MNIST
 			self.num_classes = 10
 			self.in_channels = 1
@@ -108,19 +97,6 @@ class Finetuner(object):
 				transforms.CenterCrop(28),
 				transforms.PILToTensor(),
 			])
-		else:
-			# for imagenet
-			transformations = transforms.Compose([
-					transforms.Resize(config['resize_shape']),
-					transforms.CenterCrop(config['center_crop_shape']),
-					transforms.ToTensor(),
-				])
-			
-			export_transformations = transforms.Compose([
-					transforms.Resize(config['resize_shape']),
-					transforms.CenterCrop(config['center_crop_shape']),
-					transforms.PILToTensor(),
-				])
 		
 		self.train_set = builder(root=args.datadir,
 							train=True,
@@ -132,6 +108,7 @@ class Finetuner(object):
 						   download=True,
 						   transform=transformations)
 	
+		# Verification dataset for exporting model
 		self.export_set = builder(root = args.datadir, 
 							train = False,
 							download = True,

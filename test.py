@@ -1,25 +1,13 @@
-from pkgutil import get_data
-import attr
-import onnx
-import onnx.numpy_helper as nph
+import os
 import torch
-import brevitas
-from brevitas import config
-
-import math
+import random
 import numpy as np
 import argparse
-from brevitas.graph.utils import get_module
-import importlib_resources as importlib
-from urllib3 import disable_warnings
+from copy import deepcopy
 
 from train.env import ModelEnv
-from stable_baselines3.common.monitor import Monitor
 from pretrain.utils import get_model_config
-from copy import deepcopy
 from finn.util.basic import part_map
-import random
-import os
 import brevitas.onnx as bo
 from stable_baselines3 import A2C, DDPG, PPO, SAC, TD3
 from copy import deepcopy
@@ -35,71 +23,58 @@ rl_algorithms = {
 
 model_names = ['LeNet5', 'resnet18', 'resnet34', 'resnet50', 'resnet100', 'resnet152', 'Simple']
 
-def get_example_input(dataset):
-    if dataset == "MNIST":
-        raw_i = get_data("qonnx.data", "onnx/mnist-conv/test_data_set_0/input_0.pb")
-        input_tensor = onnx.load_tensor_from_string(raw_i)
-        input_tensor_npy = nph.to_array(input_tensor).copy()
-    elif dataset == "CIFAR10":
-        ref = importlib.files("finn.qnn-data") / "cifar10/cifar10-test-data-class3.npz"
-        with importlib.as_file(ref) as fn:
-            input_tensor_npy = np.load(fn)["arr_0"].astype(np.float32)
-    
-    return input_tensor_npy
+parser = argparse.ArgumentParser(description = 'Test RL Agent')
 
-parser = argparse.ArgumentParser(description = 'Train RL Agent')
-
-### ----- TARGET MODEL ------ ###
+# Model Parameters
 parser.add_argument('--model-name', default='resnet18', metavar='ARCH', choices=model_names,
                     help = 'model_architecture: ' + ' | '.join(model_names) + ' (default: resnet18)')
 parser.add_argument('--model-path', default = None, help = 'Path to pretrained model')
 
-### ----- DATASET PARAMETERS ----- ###
-parser.add_argument('--datadir', default = './data', help='Directory where datasets are stored')
-parser.add_argument('--dataset', default = 'MNIST', choices = ['MNIST', 'CIFAR10'], help = 'Name of dataset')
-parser.add_argument('--batch-size-finetuning', default = 64, type = int, help = 'Batch size for finetuning')
-parser.add_argument('--batch-size-testing', default = 64, type = int, help = 'Batch size for testing')
-parser.add_argument('--num-workers', default = 32, type = int, help = 'Num workers')
-parser.add_argument('--calib-subset', default = 0.5, type = float, help = 'Percentage of training dataset for calibration')
-parser.add_argument('--finetuning-subset', default = 0.5, type = float, help = 'Percentage of dataset to use for finetuning')
+# Dataset Parameters
+parser.add_argument('--datadir', default = './data', help='Directory where datasets are stored (default: ./data)')
+parser.add_argument('--dataset', default = 'MNIST', choices = ['MNIST', 'CIFAR10'], help = 'Name of dataset (default: MNIST)')
+parser.add_argument('--batch-size-finetuning', default = 64, type = int, help = 'Batch size for finetuning (default: 64)')
+parser.add_argument('--batch-size-testing', default = 64, type = int, help = 'Batch size for testing (default: 64)')
+parser.add_argument('--num-workers', default = 32, type = int, help = 'Num workers (default: 32)')
+parser.add_argument('--calib-subset', default = 0.1, type = float, help = 'Percentage of training dataset for calibration (default: 0.1)')
+parser.add_argument('--finetuning-subset', default = 0.5, type = float, help = 'Percentage of dataset to use for finetuning (default: 0.5)')
 
-### ----- FINETUNER PARAMETERS ----- ###
-parser.add_argument('--finetuning-epochs', default = 5, type = int, help = 'Finetuning epochs')
-parser.add_argument('--print-every', default = 100, type = int, help = 'How frequent to print progress')
-parser.add_argument('--optimizer', default = 'Adam', choices = ['Adam', 'SGD'], help = 'Optimizer')
-parser.add_argument('--finetuning-lr', default = 1e-5, type = float, help = 'Training learning rate')
-parser.add_argument('--weight-decay', default = 0, type = float, help = 'Weight decay for optimizer')
-parser.add_argument('--loss', default = 'CrossEntropy', choices = ['CrossEntropy'], help = 'Loss Function for training')
+# Trainer Parameters
+parser.add_argument('--finetuning-epochs', default = 5, type = int, help = 'Finetuning epochs (default: 5)')
+parser.add_argument('--print-every', default = 100, type = int, help = 'How frequent to print progress (default: 100)')
+
+# Optimizer Parameters
+parser.add_argument('--optimizer', default = 'Adam', choices = ['Adam', 'SGD'], help = 'Optimizer (default: Adam)')
+parser.add_argument('--finetuning-lr', default = 1e-5, type = float, help = 'Training finetuning learning rate (default: 1e-5)')
+parser.add_argument('--weight-decay', default = 0, type = float, help = 'Weight decay for optimizer (default: 0)')
+
+# Loss Parameters
+parser.add_argument('--loss', default = 'CrossEntropy', choices = ['CrossEntropy'], help = 'Loss Function for training (default: CrossEntropy)')
 
 # Device Parameters
-parser.add_argument('--device', default = 'GPU', help = 'Device for training')
+parser.add_argument('--device', default = 'GPU', help = 'Device for training (default: GPU)')
 
-### ----- QUANTIZATION PARAMETERS ----- ###
-parser.add_argument('--scale-factor-type', default='float_scale', choices=['float_scale', 'po2_scale'], help = 'Type for scale factors (default: float)')
-parser.add_argument('--act-bit-width', default=4, type=int, help = 'Default activations bit width (default: 4)')
-parser.add_argument('--weight-bit-width', default=4, type=int, help = 'Default weight bit width (default: 4)')
-parser.add_argument('--bias-bit-width', default=8, choices=[32, 16, 8], help = 'Bias bit width (default: 8)')
+# Quantization Parameters
+parser.add_argument('--act-bit-width', default=4, type=int, help = 'Bit width for activations (default: 4)')
+parser.add_argument('--weight-bit-width', default=4, type=int, help = 'Bit width for weights (default: 4)')
 parser.add_argument('--bias-corr', default=True, action = 'store_true', help = 'Bias correction after calibration (default: enabled)')
 parser.add_argument('--min-bit', type=int, default=1, help = 'Minimum bit width (default: 1)')
 parser.add_argument('--max-bit', type=int, default=8, help = 'Maximum bit width (default: 8)')
 
-### ----- AGENT ------ ###
-parser.add_argument('--agent', default = 'TD3', choices = ['A2C', 'DDPG', 'PPO', 'SAC', 'TD3'], help = 'Choose algorithm to train agent')
-parser.add_argument('--noise', default = 0.1, type = float, help = 'Std for added noise in agent')
-parser.add_argument('--num-episodes', default = 500, type = int, help = 'Number of episodes (passes over the entire network) to train the agent for')
-parser.add_argument('--log-every', default = 10, type = int, help = 'How many episodes to wait to log agent')
-parser.add_argument('--output', default='./logs', type=str, help='')
-parser.add_argument('--seed', default = 234, type = int, help = 'Seed to reproduce')
+# Agent Parameters
+parser.add_argument('--agent', default = 'TD3', choices = ['A2C', 'DDPG', 'PPO', 'SAC', 'TD3'], help = 'Choose algorithm to train agent (default: TD3)')
+parser.add_argument('--seed', default = 234, type = int, help = 'Seed to reproduce (default: 234)')
 
-### --- DESIGN --- ###
-parser.add_argument('--board', default = "U250", help = "Name of target board")
-parser.add_argument('--shell-flow-type', default = "vitis_alveo", choices = ["vivado_zynq", "vitis_alveo"], help = "Target shell type")
-parser.add_argument('--freq', type = float, default = 200.0, help = 'Frequency in MHz')
-parser.add_argument('--max-freq', type = float, default = 300.0, help = 'Maximum device frequency in MHz')
-parser.add_argument('--target-fps', default = 6000, type = float, help = 'Target fps when target is accuracy')
+# Design Parameters
+parser.add_argument('--board', default = "U250", help = "Name of target board (default: U250)")
+parser.add_argument('--shell-flow-type', default = "vitis_alveo", choices = ["vivado_zynq", "vitis_alveo"], help = "Target shell type (default: vitis_alveo)")
+parser.add_argument('--freq', type = float, default = 200.0, help = 'Frequency in MHz (default: 200)')
+parser.add_argument('--max-freq', type = float, default = 300.0, help = 'Maximum device frequency in MHz (default: 300)')
+parser.add_argument('--target-fps', default = 6000, type = float, help = 'Target fps (default: 6000)')
 
-parser.add_argument('--output-dir', type = str, default = 'Model', help = 'Output dir for exported models')
-parser.add_argument('--onnx-output', type = str, default = 'model', help = 'Onnx output name')
+parser.add_argument('--agent-path', type = str, required = True, help = 'Path to agent checkpoint')
+parser.add_argument('--output-dir', type = str, default = 'Model', help = 'Output dir for exported models (default: Model)')
+parser.add_argument('--onnx-output', type = str, default = 'model', help = 'Onnx output name (default: model)')
 
 args = parser.parse_args()
 args.fpga_part = part_map[args.board]
@@ -107,16 +82,16 @@ args.fpga_part = part_map[args.board]
 # set seed to reproduce
 random.seed(args.seed)
 torch.manual_seed(args.seed)
+
 if args.device == 'GPU' and torch.cuda.is_available():
     torch.cuda.manual_seed_all(args.seed)
 
 # create environment
-env = Monitor(
-    ModelEnv(args, get_model_config(args.model_name, args.dataset)))
+env = ModelEnv(args, get_model_config(args.dataset))
 
 n_actions = env.action_space.shape[-1]
 agent = rl_algorithms[args.agent]("MlpPolicy", env, action_noise = None, verbose = 1)
-rl_model = agent.load(f'agents/agent_{args.model_name}')
+rl_model = agent.load(args.agent_path)
 
 done = False
 obs, _ = env.reset()
@@ -127,7 +102,7 @@ while not done:
 model = deepcopy(env.model)
 model.eval()
 
-model_config = get_model_config(args.model_name, args.dataset)
+model_config = get_model_config(args.dataset)
 center_crop_shape = model_config['center_crop_shape']
 img_shape = center_crop_shape
 

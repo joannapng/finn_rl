@@ -247,7 +247,7 @@ class ModelEnv(gym.Env):
         self.strategy.append(self.last_action)
 
         if self.is_final_layer():
-            print("Strategy: " + str(self.strategy))        
+            print("Strategy: " + str(self.strategy))
             fps, avg_util = self.final_action_wall()
             self.model = self.quantizer.quantize_model(self.model,
                                             self.strategy,
