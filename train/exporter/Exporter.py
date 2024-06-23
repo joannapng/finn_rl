@@ -168,10 +168,6 @@ def specialize_layers(model, fpga_part):
 	model = model.transform(SpecializeLayers(fpga_part))
 	model = model.transform(InferShapes())
 	model = model.transform(InferDataTypes())
-	graph = model.graph
-	for node in graph.node:
-		if "MVAU" in node.op_type:
-			print(node.op_type)
 	return model
 
 def set_folding(model, board):

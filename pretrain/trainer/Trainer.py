@@ -1,18 +1,17 @@
-import torch
-import torchvision
-import torch.nn as nn
-import torch.nn.functional as F
 import uuid
 import os
-import copy
 
-from torch.utils.data import DataLoader, sampler, random_split
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+from torch.utils.data import DataLoader, random_split
 from torchvision import transforms
 from torchvision.datasets import CIFAR10, MNIST
-import torchvision.models
+
 from ..logger import Logger
-from ..models import LeNet5, ResNet18, ResNet34, ResNet50, ResNet101, ResNet152, Simple
 from ..utils import *
+from ..models import LeNet5, ResNet18, ResNet34, ResNet50, ResNet101, ResNet152, Simple
 
 networks = {'LeNet5' : LeNet5,
 			'resnet18' : ResNet18, 
@@ -39,7 +38,7 @@ class Trainer(object):
 		self.in_channels = None
 		self.batch_size_training = self.args.batch_size_training
 		self.batch_size_validation= self.args.batch_size_validation
-		self.init_dataset(self.args, model_config)
+		self.init_dataset(self.args)
 
 		self.training_epochs = self.args.training_epochs
 
@@ -74,10 +73,8 @@ class Trainer(object):
 			print('Using CPU device')
 			self.device = 'cpu'
 
-	def init_dataset(self, args, config):
+	def init_dataset(self, args):
 		if args.dataset == 'CIFAR10':
-			normalize = transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
-
 			builder = CIFAR10
 			self.num_classes = 10
 			self.in_channels = 3
@@ -87,8 +84,6 @@ class Trainer(object):
 				transforms.ToTensor(),
 			])
 		elif args.dataset == 'MNIST':
-			normalize = transforms.Normalize(mean = (0.1307, ), std = (0.3081, ))
-
 			builder = MNIST
 			self.num_classes = 10
 			self.in_channels = 1
@@ -111,7 +106,6 @@ class Trainer(object):
 		
 		train_set, val_set = random_split(train_set, [1 - args.validation_split, args.validation_split])
 
-
 		self.train_loader = DataLoader(train_set,
 									   batch_size = self.batch_size_training,
 									   num_workers = self.args.num_workers,
@@ -133,14 +127,14 @@ class Trainer(object):
 		self.model = builder(num_classes = self.num_classes, in_channels = self.in_channels).to(self.device)
 
 		if self.args.resume_from is not None and not self.args.pretrained: # resume training from checkpoint
-			print('=>Loading model from checkpoint at: {}'.format(self.args.resume_from))
+			print('Loading model from checkpoint at: {}'.format(self.args.resume_from))
 			package = torch.load(self.args.resume_from, map_location = self.device)
 			self.model.load_state_dict(package['state_dict'])
 			self.best_val_acc = package['best_val_acc']
 			self.model.to(self.device)
 		
 		if self.args.pretrained and self.args.model_path is not None:
-			print('=>Loading pretrained model')
+			print('Loading pretrained model')
 			package = torch.load(self.args.model_path, map_location = self.device)
 			self.model.load_state_dict(package['state_dict'])
 			self.model.to(self.device)

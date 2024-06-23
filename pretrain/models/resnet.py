@@ -1,11 +1,3 @@
-'''ResNet in PyTorch.
-
-For Pre-activation ResNet, see 'preact_resnet.py'.
-
-Reference:
-[1] Kaiming He, Xiangyu Zhang, Shaoqing Ren, Jian Sun
-    Deep Residual Learning for Image Recognition. arXiv:1512.03385
-'''
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -38,7 +30,6 @@ class BasicBlock(nn.Module):
         out = F.relu(out)
         return out
 
-
 class Bottleneck(nn.Module):
     expansion = 4
 
@@ -69,7 +60,6 @@ class Bottleneck(nn.Module):
         out = F.relu(out)
         return out
 
-
 class ResNet(nn.Module):
     def __init__(self, block, num_blocks, num_classes=10):
         super(ResNet, self).__init__()
@@ -94,7 +84,8 @@ class ResNet(nn.Module):
         return nn.Sequential(*layers)
 
     def forward(self, x):
-        out = F.relu(self.bn1(self.conv1(x)))
+        out = 2.0 * x - 1.0
+        out = F.relu(self.bn1(self.conv1(out)))
         out = self.layer1(out)
         out = self.layer2(out)
         out = self.layer3(out)

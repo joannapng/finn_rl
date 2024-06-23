@@ -15,7 +15,6 @@ from torch.utils.data import DataLoader, sampler, random_split
 from torchvision import transforms
 from torchvision.datasets import CIFAR10, MNIST
 import torchvision.models
-#from pretrain.utils import get_torchvision_model
 from .validate import validate
 from .calibrate import calibrate
 from pretrain.models.LeNet5 import LeNet5

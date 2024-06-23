@@ -1,18 +1,17 @@
-import argparse
-from gc import callbacks
 import torch
 import random
-import torchvision
+import argparse
 import numpy as np
+
 from train.env import ModelEnv
 from pretrain.utils import get_model_config
+
+from stable_baselines3 import A2C, DDPG, PPO, SAC, TD3
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.noise import NormalActionNoise
 from train.callbacks.StopTrainingOnNoImprovementCallback import StopTrainingOnNoImprovementCallback
-from stable_baselines3 import A2C, DDPG, PPO, SAC, TD3
-from copy import deepcopy
-import multiprocessing as mp
-from finn.util.basic import part_map, alveo_default_platform
+
+from finn.util.basic import part_map
 
 rl_algorithms = {
     'A2C': A2C,
@@ -26,46 +25,44 @@ model_names = ['LeNet5', 'resnet18', 'resnet34', 'resnet50', 'resnet100', 'resne
 
 parser = argparse.ArgumentParser(description = 'Train RL Agent')
 
-### ----- TARGET MODEL ------ ###
+# Model Parameters
 parser.add_argument('--model-name', default='resnet18', metavar='ARCH', choices=model_names,
                     help = 'model_architecture: ' + ' | '.join(model_names) + ' (default: resnet18)')
 parser.add_argument('--model-path', default = None, help = 'Path to pretrained model')
 
-### ----- DATASET PARAMETERS ----- ###
-parser.add_argument('--datadir', default = './data', help='Directory where datasets are stored')
-parser.add_argument('--dataset', default = 'MNIST', choices = ['MNIST', 'CIFAR10'], help = 'Name of dataset')
-parser.add_argument('--batch-size-finetuning', default = 64, type = int, help = 'Batch size for finetuning')
-parser.add_argument('--batch-size-testing', default = 64, type = int, help = 'Batch size for testing')
-parser.add_argument('--num-workers', default = 32, type = int, help = 'Num workers')
-parser.add_argument('--calib-subset', default = 0.1, type = float, help = 'Percentage of training dataset for calibration')
-parser.add_argument('--finetuning-subset', default = 0.5, type = float, help = 'Percentage of dataset to use for finetuning')
+# Dataset Parameters
+parser.add_argument('--datadir', default = './data', help='Directory where datasets are stored (default: ./data)')
+parser.add_argument('--dataset', default = 'MNIST', choices = ['MNIST', 'CIFAR10'], help = 'Name of dataset (default: MNIST)')
+parser.add_argument('--batch-size-finetuning', default = 64, type = int, help = 'Batch size for finetuning (default: 64)')
+parser.add_argument('--batch-size-testing', default = 64, type = int, help = 'Batch size for testing (default: 64)')
+parser.add_argument('--num-workers', default = 32, type = int, help = 'Num workers (default: 32)')
+parser.add_argument('--calib-subset', default = 0.1, type = float, help = 'Percentage of training dataset for calibration (default: 0.1)')
+parser.add_argument('--finetuning-subset', default = 0.5, type = float, help = 'Percentage of dataset to use for finetuning (default: 0.5)')
 
 # Trainer Parameters
-parser.add_argument('--finetuning-epochs', default = 5, type = int, help = 'Finetuning epochs')
-parser.add_argument('--print-every', default = 100, type = int, help = 'How frequent to print progress')
+parser.add_argument('--finetuning-epochs', default = 5, type = int, help = 'Finetuning epochs (default: 5)')
+parser.add_argument('--print-every', default = 100, type = int, help = 'How frequent to print progress (default: 100)')
 
 # Optimizer Parameters
-parser.add_argument('--optimizer', default = 'Adam', choices = ['Adam', 'SGD'], help = 'Optimizer')
-parser.add_argument('--finetuning-lr', default = 1e-5, type = float, help = 'Training learning rate')
-parser.add_argument('--weight-decay', default = 0, type = float, help = 'Weight decay for optimizer')
+parser.add_argument('--optimizer', default = 'Adam', choices = ['Adam', 'SGD'], help = 'Optimizer (default: Adam)')
+parser.add_argument('--finetuning-lr', default = 1e-5, type = float, help = 'Training finetuning learning rate (default: 1e-5)')
+parser.add_argument('--weight-decay', default = 0, type = float, help = 'Weight decay for optimizer (default: 0)')
 
 # Loss Parameters
-parser.add_argument('--loss', default = 'CrossEntropy', choices = ['CrossEntropy'], help = 'Loss Function for training')
+parser.add_argument('--loss', default = 'CrossEntropy', choices = ['CrossEntropy'], help = 'Loss Function for training (default: CrossEntropy)')
 
 # Device Parameters
-parser.add_argument('--device', default = 'GPU', help = 'Device for training')
+parser.add_argument('--device', default = 'GPU', help = 'Device for training (default: GPU)')
 
-### ----- QUANTIZATION PARAMETERS ----- ###
-parser.add_argument('--scale-factor-type', default='float_scale', choices=['float_scale', 'po2_scale'], help = 'Type for scale factors (default: float)')
-parser.add_argument('--act-bit-width', default=4, type=int, help = 'Activations bit width (default: 4)')
-parser.add_argument('--weight-bit-width', default=4, type=int, help = 'Weight bit width (default: 4)')
-parser.add_argument('--bias-bit-width', default=8, type = int, choices=[32, 16, 8], help = 'Bias bit width (default: 8)')
+# Quantization Parameters
+parser.add_argument('--act-bit-width', default=4, type=int, help = 'Bit width for activations (default: 4)')
+parser.add_argument('--weight-bit-width', default=4, type=int, help = 'Bit width for weights (default: 4)')
 parser.add_argument('--bias-corr', default=True, action = 'store_true', help = 'Bias correction after calibration (default: enabled)')
 parser.add_argument('--min-bit', type=int, default=1, help = 'Minimum bit width (default: 1)')
 parser.add_argument('--max-bit', type=int, default=8, help = 'Maximum bit width (default: 8)')
 
-### ----- AGENT ------ ###
-parser.add_argument('--agent', default = 'TD3', choices = ['A2C', 'DDPG', 'PPO', 'SAC', 'TD3'], help = 'Choose algorithm to train agent')
+# Agent Parameters
+parser.add_argument('--agent', default = 'TD3', choices = ['A2C', 'DDPG', 'PPO', 'SAC', 'TD3', 'None'], help = 'Choose algorithm to train agent')
 parser.add_argument('--noise', default = 0.1, type = float, help = 'Std for added noise in agent')
 parser.add_argument('--num-episodes', default = 500, type = int, help = 'Number of episodes (passes over the entire network) to train the agent for')
 parser.add_argument('--log-every', default = 10, type = int, help = 'How many episodes to wait to log agent')

@@ -194,10 +194,6 @@ def specialize_layers(model: ModelWrapper, cfg: build.DataflowBuildConfig):
 	model = model.transform(SpecializeLayers(cfg._resolve_fpga_part()))
 	model = model.transform(InferShapes())
 	model = model.transform(InferDataTypes())
-	graph = model.graph
-	for node in graph.node:
-		if "MVAU" in node.op_type:
-			print(node.op_type)
 	return model
 
 def qonnx_to_finn(model: ModelWrapper, cfg: build.DataflowBuildConfig):

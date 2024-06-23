@@ -35,9 +35,6 @@ rl_algorithms = {
 
 model_names = ['LeNet5', 'resnet18', 'resnet34', 'resnet50', 'resnet100', 'resnet152', 'Simple']
 
-print(config.JIT_ENABLED)
-print(config.NATIVE_STE_BACKEND_ENABLED)
-
 def get_example_input(dataset):
     if dataset == "MNIST":
         raw_i = get_data("qonnx.data", "onnx/mnist-conv/test_data_set_0/input_0.pb")
