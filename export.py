@@ -1,20 +1,13 @@
 import os
 import argparse
-import onnx
-import onnx.numpy_helper as nph
-import torch
-import numpy as np
-from exporter.Exporter import (create_dataflow_partition, preprocessing, postprocessing, 
+from exporter.Exporter import (preprocessing, postprocessing,
 							   make_input_channels_last, streamline_resnet, 
 							   convert_to_hw_resnet, name_nodes, streamline_lenet,
-							   convert_to_hw_lenet, qonnx_to_finn, specialize_layers, tidy_up)
+							   convert_to_hw_lenet)
 
 import finn.builder.build_dataflow as build
 import finn.builder.build_dataflow_config as build_cfg
-from finn.builder.build_dataflow_config import LargeFIFOMemStyle, AutoFIFOSizingMethod
 from finn.util.basic import part_map, alveo_default_platform
-
-from brevitas.export import export_qonnx
 
 build_dir = os.environ['FINN_BUILD_DIR']
 
@@ -28,7 +21,6 @@ parser.add_argument('--shell-flow-type', default = "vitis_alveo", choices = ["vi
 parser.add_argument('--input-file', default = 'input.npy', type = str, help = 'Input file for validation')
 parser.add_argument('--expected-output-file', default = 'expected_output.npy', type = str, help = 'Output file for validation')
 parser.add_argument('--folding-config-file', default = 'folding_config.json', type = str, help = 'Folding config file')
-#parser.add_argument('--specialize-layers-config-file', default = 'specialize_layers_config.json', type = str, help = 'Specialize layers config')
 
 streamline_functions = {
 	'LeNet5' : streamline_lenet,
@@ -69,13 +61,15 @@ def main():
 		folding_config_file = args.folding_config_file,
 		verify_input_npy = args.input_file,
 		verify_expected_output_npy = args.expected_output_file,
-		verify_save_full_context = True,
+		#verify_save_full_context = True,
 		steps = [
 			preprocessing,
 			postprocessing,
 			make_input_channels_last,
 			"step_tidy_up",
-			qonnx_to_finn,
+			name_nodes,
+			"step_qonnx_to_finn",
+			name_nodes,
 			streamline_function,
 			convert_to_hw_function,
 			"step_create_dataflow_partition",
@@ -105,7 +99,7 @@ def main():
 		],
 		verify_steps = [
 			build_cfg.VerificationStepType.QONNX_TO_FINN_PYTHON,
-			#build_cfg.VerificationStepType.TIDY_UP_PYTHON,
+			build_cfg.VerificationStepType.TIDY_UP_PYTHON,
 			build_cfg.VerificationStepType.STREAMLINED_PYTHON,
 			build_cfg.VerificationStepType.FOLDED_HLS_CPPSIM,
 			build_cfg.VerificationStepType.STITCHED_IP_RTLSIM

@@ -16,7 +16,7 @@ from brevitas.graph.base import InsertModuleCallAfter
 from brevitas.graph.base import ModuleToModuleByInstance
 from brevitas.graph.base import ModuleInstanceToModuleInstance
 
-from brevitas.quant.scaled_int import Int8Bias
+from brevitas.quant.scaled_int import Int8BiasPerTensorFloatInternalScaling
 from brevitas.quant import Int8WeightPerTensorFloat
 from brevitas.quant.scaled_int import Int8ActPerTensorFloat
 
@@ -386,7 +386,7 @@ class Quantizer(object):
                             
                         if module.bias is not None:
                             # add bias quant if the module has bias
-                            quant_module_kwargs['bias_quant'] = Int8Bias
+                            quant_module_kwargs['bias_quant'] = Int8BiasPerTensorFloatInternalScaling
                         else:
                             quant_module_kwargs['bias_quant'] = None
 

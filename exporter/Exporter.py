@@ -196,63 +196,6 @@ def specialize_layers(model: ModelWrapper, cfg: build.DataflowBuildConfig):
 	model = model.transform(InferDataTypes())
 	return model
 
-def qonnx_to_finn(model: ModelWrapper, cfg: build.DataflowBuildConfig):
-	q_count = 0
-	for op_type in ["BinaryQuant", "Quant", "Trunc"]:
-		q_count += len(model.get_nodes_by_op_type(op_type))
-	if q_count == 0:
-		return model
-	
-	model = cleanup_model(model)
-
-	from qonnx.transformation.base import Transformation
-	from qonnx.transformation.extract_conv_bias import ExtractBiasFromConv
-	from qonnx.transformation.gemm_to_matmul import GemmToMatMul
-	from qonnx.transformation.infer_datatypes import InferDataTypes
-	from qonnx.transformation.quant_constant_folding import FoldTransposeIntoQuantInit
-	from qonnx.transformation.remove import RemoveIdentityOps
-
-	from finn.transformation.qonnx.fold_quant_weights import FoldQuantWeights
-	from finn.transformation.qonnx.infer_quant_avg_pool_2d import (
-		AvgPoolAndTruncToQuantAvgPool,
-	)
-	from finn.transformation.qonnx.quant_act_to_multithreshold import (
-		ConvertQuantActToMultiThreshold,
-		default_filter_function_generator,
-	)
-
-	model = model.transform(ExtractBiasFromConv())
-	
-	# Gemm operations are not supported by FINN, so we convert them to MatMul
-	model = model.transform(GemmToMatMul())
-	model = model.transform(FoldTransposeIntoQuantInit())
-	
-	# Make sure the datatypes exist, these are required for folding the weights
-	model = model.transform(InferDataTypes())
-	
-	# Fold weights
-	model = model.transform(FoldQuantWeights())
-	#if VerificationStepType.QONNX_TO_FINN_PYTHON in cfg._resolve_verification_steps():
-	#	verify_step(model, cfg, "qonnx_to_finn_python", need_parent=False)
-	
-	# Convert activations
-	model = model.transform(
-		ConvertQuantActToMultiThreshold()
-	)
-	# Recompute datatypes
-	model = model.transform(InferDataTypes())
-	# Convert AvgPool -> Mul -> Trunc structure to QuantAvgPool2d
-	model = model.transform(AvgPoolAndTruncToQuantAvgPool())
-	# Remove empty padding if it exists
-	model = model.transform(RemoveIdentityOps())
-	model = model.transform(GiveUniqueNodeNames())
-	model = model.transform(GiveReadableTensorNames())
-
-	if VerificationStepType.QONNX_TO_FINN_PYTHON in cfg._resolve_verification_steps():
-		verify_step(model, cfg, "qonnx_to_finn_python", need_parent=False)
-	
-	return model
-
 def streamline_lenet(model: ModelWrapper, cfg: build.DataflowBuildConfig):
 	model = model.transform(ConvertSubToAdd())
 	model = model.transform(ConvertDivToMul())
@@ -280,6 +223,9 @@ def streamline_lenet(model: ModelWrapper, cfg: build.DataflowBuildConfig):
 
 	model = model.transform(absorb.AbsorbScalarMulAddIntoTopK())
 
+	if VerificationStepType.STREAMLINED_PYTHON in cfg._resolve_verification_steps():
+		verify_step(model, cfg, "streamlined_python", need_parent=False)
+
 	return model
 
 def streamline_simple(model: ModelWrapper, cfg: build.DataflowBuildConfig):
@@ -299,6 +245,10 @@ def streamline_simple(model: ModelWrapper, cfg: build.DataflowBuildConfig):
 	model = model.transform(reorder.MoveScalarMulPastMatMul())
 	model = model.transform(absorb.AbsorbMulIntoMultiThreshold())
 	model = model.transform(absorb.AbsorbScalarMulAddIntoTopK())
+
+	if VerificationStepType.STREAMLINED_PYTHON in cfg._resolve_verification_steps():
+		verify_step(model, cfg, "streamlined_python", need_parent=False)
+
 
 	return model
 
@@ -332,6 +282,9 @@ def streamline_resnet(model: ModelWrapper, cfg: build.DataflowBuildConfig):
 	model = model.transform(RoundAndClipThresholds())
 	model = model.transform(InferDataLayouts())
 	model = model.transform(RemoveUnusedTensors())
+
+	if VerificationStepType.STREAMLINED_PYTHON in cfg._resolve_verification_steps():
+		verify_step(model, cfg, "streamlined_python", need_parent=False)
 
 	return model
 
