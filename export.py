@@ -86,6 +86,7 @@ def main():
 		folding_config_file = args.folding_config_file,
 		verify_input_npy = args.input_file,
 		verify_expected_output_npy = args.expected_output_file,
+		verify_save_full_context = True,
 		steps = [
 			preprocessing,
 			postprocessing,

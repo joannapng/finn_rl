@@ -70,14 +70,12 @@ class Finetuner(object):
 			self.in_channels = 3
 
 			transformations = transforms.Compose([
-				transforms.RandomCrop(32, padding = 4),
-				transforms.RandomHorizontalFlip(),
+				transforms.CenterCrop(32),
 				transforms.ToTensor(),
 			])
 
 			export_transformations = transforms.Compose([
-				transforms.RandomCrop(32, padding = 4),
-				transforms.RandomHorizontalFlip(),
+				transforms.CenterCrop(32),
 				transforms.PILToTensor()
 			])
 
