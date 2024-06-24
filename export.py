@@ -22,6 +22,9 @@ parser.add_argument('--input-file', default = 'input.npy', type = str, help = 'I
 parser.add_argument('--expected-output-file', default = 'expected_output.npy', type = str, help = 'Output file for validation')
 parser.add_argument('--folding-config-file', default = 'folding_config.json', type = str, help = 'Folding config file')
 
+parser.add_argument('--rtlsim-performance', action=argparse.BooleanOptionalAction, help = 'Generate rtlsim performance reports')
+parser.add_argument('--rtlsim-verification', action=argparse.BooleanOptionalAction, help = 'Perform rtlsim verification (not recommended for large networks)')
+
 streamline_functions = {
 	'LeNet5' : streamline_lenet,
 	'resnet18' : streamline_resnet,
@@ -49,6 +52,28 @@ def main():
 	streamline_function = streamline_functions[args.model_name]
 	convert_to_hw_function = convert_to_hw_functions[args.model_name]
 
+	generate_outputs = [
+		build_cfg.DataflowOutputType.ESTIMATE_REPORTS,
+		build_cfg.DataflowOutputType.STITCHED_IP,
+		build_cfg.DataflowOutputType.OOC_SYNTH,
+		build_cfg.DataflowOutputType.BITFILE,
+		build_cfg.DataflowOutputType.PYNQ_DRIVER,
+		build_cfg.DataflowOutputType.DEPLOYMENT_PACKAGE,
+	]
+
+	if args.rtlsim_performance:
+		generate_outputs.append(build_cfg.DataflowOutputType.RTLSIM_PERFORMANCE)
+
+	verify_steps = [
+		build_cfg.VerificationStepType.QONNX_TO_FINN_PYTHON,
+		build_cfg.VerificationStepType.TIDY_UP_PYTHON,
+		build_cfg.VerificationStepType.STREAMLINED_PYTHON,
+		build_cfg.VerificationStepType.FOLDED_HLS_CPPSIM,
+	]
+
+	if args.rtlsim_verification:
+		verify_steps.append(build_cfg.VerificationStepType.STITCHED_IP_RTLSIM)
+
 	cfg_build = build.DataflowBuildConfig(
 		output_dir = output_dir,
 		synth_clk_period_ns = args.synth_clk_period_ns,
@@ -61,7 +86,6 @@ def main():
 		folding_config_file = args.folding_config_file,
 		verify_input_npy = args.input_file,
 		verify_expected_output_npy = args.expected_output_file,
-		#verify_save_full_context = True,
 		steps = [
 			preprocessing,
 			postprocessing,
@@ -88,22 +112,8 @@ def main():
 			"step_make_pynq_driver",
 			"step_deployment_package",
 		],
-		generate_outputs = [
-			build_cfg.DataflowOutputType.ESTIMATE_REPORTS,
-			build_cfg.DataflowOutputType.STITCHED_IP,
-			build_cfg.DataflowOutputType.RTLSIM_PERFORMANCE,
-			build_cfg.DataflowOutputType.OOC_SYNTH,
-			build_cfg.DataflowOutputType.BITFILE,
-			build_cfg.DataflowOutputType.PYNQ_DRIVER,
-			build_cfg.DataflowOutputType.DEPLOYMENT_PACKAGE,
-		],
-		verify_steps = [
-			build_cfg.VerificationStepType.QONNX_TO_FINN_PYTHON,
-			build_cfg.VerificationStepType.TIDY_UP_PYTHON,
-			build_cfg.VerificationStepType.STREAMLINED_PYTHON,
-			build_cfg.VerificationStepType.FOLDED_HLS_CPPSIM,
-			build_cfg.VerificationStepType.STITCHED_IP_RTLSIM
-		]
+		generate_outputs = generate_outputs,
+		verify_steps = verify_steps
 	)
 
 	build.build_dataflow_cfg(args.onnx_model, cfg_build)
