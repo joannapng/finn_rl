@@ -72,9 +72,12 @@ parser.add_argument('--freq', type = float, default = 200.0, help = 'Frequency i
 parser.add_argument('--max-freq', type = float, default = 300.0, help = 'Maximum device frequency in MHz (default: 300)')
 parser.add_argument('--target-fps', default = 6000, type = float, help = 'Target fps (default: 6000)')
 
-parser.add_argument('--agent-path', type = str, required = True, help = 'Path to agent checkpoint')
+parser.add_argument('--agent-path', type = str, default = '', help = 'Path to agent checkpoint')
 parser.add_argument('--output-dir', type = str, default = 'Model', help = 'Output dir for exported models (default: Model)')
 parser.add_argument('--onnx-output', type = str, default = 'model', help = 'Onnx output name (default: model)')
+
+parser.add_argument('--use-custom-strategy', action = 'store_true', default = False, help = 'Use custom quantization strategy (overrides agent parameter, default: False)')
+parser.add_argument('--strategy', type = str, default = '', help = 'Custom quantization strategy (example input: \"[7, 8, 1, 3, 1, 4]\")')
 
 args = parser.parse_args()
 args.fpga_part = part_map[args.board]
@@ -90,14 +93,28 @@ if args.device == 'GPU' and torch.cuda.is_available():
 env = ModelEnv(args, get_model_config(args.dataset), testing = True)
 
 n_actions = env.action_space.shape[-1]
-agent = rl_algorithms[args.agent]("MlpPolicy", env, action_noise = None, verbose = 1)
-rl_model = agent.load(args.agent_path)
+
 
 done = False
 obs, _ = env.reset()
-while not done:
-    action, _states = rl_model.predict(obs)
-    obs, rewards, done, _, info = env.step(action)
+
+if not args.use_custom_strategy:
+    agent = rl_algorithms[args.agent]("MlpPolicy", env, action_noise = None, verbose = 1)
+    rl_model = agent.load(args.agent_path)
+    while not done:
+        action, _states = rl_model.predict(obs)
+        obs, rewards, done, _, info = env.step(action)
+else:
+    # convert string strategy to list
+    strategy = args.strategy.replace("[", "").replace("]", "")
+    strategy = list(strategy.split(", "))
+    strategy = [int(s) for s in strategy]
+
+    idx = 0
+    while not done:
+        action = strategy[idx]
+        done, info = env.step_(action)
+        idx += 1
 
 model = deepcopy(env.model)
 model.eval()

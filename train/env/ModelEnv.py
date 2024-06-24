@@ -290,6 +290,49 @@ class ModelEnv(gym.Env):
         obs = self.layer_embedding[self.cur_ind, :].copy()
         info = {'accuracy' : 0.0, 'fps' : 0.0, 'avg_util' : 0.0, 'strategy' : self.strategy}
         return obs, reward, done, False, info
+
+    def step_(self, action):
+        self.last_action = action
+        self.strategy.append(self.last_action)
+
+        if self.is_final_layer():
+            print("Strategy: " + str(self.strategy))
+            fps, avg_util = self.final_action_wall()
+            self.model = self.quantizer.quantize_model(self.model,
+                                            self.strategy,
+                                            self.quantizable_idx,
+                                            self.num_quant_acts)
+            # calibrate model 
+            self.finetuner.model = deepcopy(self.model) 
+            self.finetuner.model.to(self.finetuner.device)
+            self.finetuner.calibrate()
+
+            # finetune model
+            self.finetuner.init_finetuning_optim()
+            self.finetuner.init_loss()
+            self.finetuner.finetune()
+
+            # validate model
+            acc = self.finetuner.validate()
+            self.model = deepcopy(self.finetuner.model)
+            
+            reward = self.reward(acc)
+
+            if reward > self.best_reward:
+                self.best_reward = reward
+            
+            done = True
+            info = {'accuracy' : acc, 'fps' : fps, 'avg_util' : avg_util, 'strategy' : self.strategy}
+            return done, info 
+        
+        reward = 0 
+
+        self.cur_ind += 1
+        self.index_to_quantize = self.quantizable_idx[self.cur_ind]
+
+        done = False
+        info = {'accuracy' : 0.0, 'fps' : 0.0, 'avg_util' : 0.0, 'strategy' : self.strategy}
+        return done, info
     
     def reward(self, acc):
         # reward should be within [-1, 1]
