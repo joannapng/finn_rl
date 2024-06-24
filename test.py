@@ -87,7 +87,7 @@ if args.device == 'GPU' and torch.cuda.is_available():
     torch.cuda.manual_seed_all(args.seed)
 
 # create environment
-env = ModelEnv(args, get_model_config(args.dataset))
+env = ModelEnv(args, get_model_config(args.dataset), testing = True)
 
 n_actions = env.action_space.shape[-1]
 agent = rl_algorithms[args.agent]("MlpPolicy", env, action_noise = None, verbose = 1)

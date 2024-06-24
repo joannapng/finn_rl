@@ -1,3 +1,4 @@
+from copy import deepcopy
 import os
 import torch
 import random
@@ -10,8 +11,8 @@ from pretrain.utils import get_model_config
 from stable_baselines3 import A2C, DDPG, PPO, SAC, TD3
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.noise import NormalActionNoise
-from stable_baselines3.common.callbacks import CheckpointCallback
-from train.callbacks.StopTrainingOnNoImprovementCallback import StopTrainingOnNoImprovementCallback
+from stable_baselines3.common.callbacks import CheckpointCallback, StopTrainingOnNoModelImprovement, EvalCallback
+#from train.callbacks.StopTrainingOnNoImprovementCallback import StopTrainingOnNoImprovementCallback
 
 from finn.util.basic import part_map
 
@@ -91,6 +92,8 @@ def main():
     args.fpga_part = part_map[args.board]
     args.output_dir = args.model_name
 
+    eval_env = ModelEnv(args, get_model_config(args.dataset), testing = True)
+
     env = Monitor(
         ModelEnv(args, get_model_config(args.dataset)),
         filename = 'monitor.csv',
@@ -102,12 +105,12 @@ def main():
 
     agent = rl_algorithms[args.agent]("MlpPolicy", env, action_noise = action_noise, verbose = 1, seed = args.seed)
     
-    # check every log_every episodes for improvement and if after 3 checks the model has not progressed, end training
-    stop_train_callback = StopTrainingOnNoImprovementCallback(check_freq=len(env.quantizable_idx) * args.log_every, patience = 3)
+    stop_train_callback = StopTrainingOnNoModelImprovement(max_no_improvement_evals = 3, min_evals = 5, verbose = 1)
+    eval_callback = EvalCallback(eval_env, eval_freq = len(env.quantizable_idx) * 30, callback_after_eval = stop_train_callback, verbose = 1, n_eval_episodes = 1)
     checkpoint_callback = CheckpointCallback(save_freq = args.save_every * len(env.quantizable_idx), save_path = 'agents', name_prefix = f'agent_{args.model_name}') 
     agent.learn(total_timesteps=len(env.quantizable_idx) * args.num_episodes, 
                 log_interval=args.log_every,
-                callback = [stop_train_callback, checkpoint_callback])
+                callback = [eval_callback, checkpoint_callback])
     agent.save(f'agents/agent_{args.model_name }')
     
 if __name__ == "__main__":

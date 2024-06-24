@@ -76,8 +76,9 @@ class ActTypes(IntEnum):
     SIGMOID = 2
 
 class ModelEnv(gym.Env):
-    def __init__(self, args, model_config):
+    def __init__(self, args, model_config, testing = False):
         self.args = args
+        self.testing = testing
 
         self.observation_space = spaces.Box(low = 0.0, high = 1.0, shape=(6, ), dtype = np.float32)
         self.action_space = spaces.Box(low = -1.0, high = 1.0, shape = (1, ), dtype = np.float32)
@@ -134,7 +135,8 @@ class ModelEnv(gym.Env):
         print('Original Accuracy: {:.3f}%'.format(self.orig_acc * 100))
 
         # find maximum fps (minimum bitwidth in all layers and maximum folding
-        self.maximum_fps()
+        if not self.testing:
+            self.maximum_fps()
 
     def build_state_embedding(self):
         self.model = preprocess_for_quantize(self.model)
@@ -357,6 +359,7 @@ class ModelEnv(gym.Env):
                     if bit > self.min_bit and bit > self.bound_list[idx][0]:
                         self.strategy[idx] -= 1
                         reduced = True
+                        print("Strategy: " + str(self.strategy))
                         break
                 
                 if not reduced:
