@@ -154,6 +154,9 @@ def set_folding(model, output_dir, board):
 	model = set_defaults(model)
 	f = open(platform_files[board], 'r')
 	available_resources = json.load(f)['resources']
+
+	for resource in available_resources.keys():
+		available_resources[resource] *= 0.8
 	
 	model, max_cycles, avg_util, feasible = folding(model, available_resources)
 

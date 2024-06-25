@@ -1,3 +1,4 @@
+import resource
 import numpy as np
 import qonnx.custom_op.registry as registry
 from finn.util.fpgadataflow import is_hls_node, is_rtl_node
@@ -390,6 +391,7 @@ def folding(model, available_resources):
 		return model, 0.0, avg_util, False
 
 	while feasible:
+		prev_model = deepcopy(model)
 		cycles_per_layer = estimate_cycles(model)
 		sorted_cycles_per_layer = sorted(cycles_per_layer.items(), key = lambda x : x[1], reverse = True)
 		bottleneck_layer, latency = sorted_cycles_per_layer[0]
@@ -399,10 +401,14 @@ def folding(model, available_resources):
 		if not increased:
 			break
 
-		prev_model = deepcopy(model)
 		model, feasible = isFeasible(model, available_resources)
 	
 	model = deepcopy(prev_model)
+
+	resources_per_layer = estimate_resources(model)
+	resources_total = aggregate_dict_keys(resources_per_layer)
+	print("Total resources: " + str(resources_total))
+	print("Available resources: " + str(available_resources))
 
 	cycles_per_layer = estimate_cycles(model)
 	max_cycles = max(cycles_per_layer.items(), key = lambda x : x[1])[1]

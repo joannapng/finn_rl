@@ -61,18 +61,18 @@ def main():
 		build_cfg.DataflowOutputType.DEPLOYMENT_PACKAGE,
 	]
 
-	if args.rtlsim_performance:
-		generate_outputs.append(build_cfg.DataflowOutputType.RTLSIM_PERFORMANCE)
+	#if args.rtlsim_performance:
+		#generate_outputs.append(build_cfg.DataflowOutputType.RTLSIM_PERFORMANCE)
 
 	verify_steps = [
-		build_cfg.VerificationStepType.QONNX_TO_FINN_PYTHON,
-		build_cfg.VerificationStepType.TIDY_UP_PYTHON,
-		build_cfg.VerificationStepType.STREAMLINED_PYTHON,
-		build_cfg.VerificationStepType.FOLDED_HLS_CPPSIM,
+		#build_cfg.VerificationStepType.QONNX_TO_FINN_PYTHON,
+		#build_cfg.VerificationStepType.TIDY_UP_PYTHON,
+		#build_cfg.VerificationStepType.STREAMLINED_PYTHON,
+		#build_cfg.VerificationStepType.FOLDED_HLS_CPPSIM,
 	]
 
-	if args.rtlsim_verification:
-		verify_steps.append(build_cfg.VerificationStepType.STITCHED_IP_RTLSIM)
+	#if args.rtlsim_verification:
+		#verify_steps.append(build_cfg.VerificationStepType.STITCHED_IP_RTLSIM)
 
 	cfg_build = build.DataflowBuildConfig(
 		output_dir = output_dir,

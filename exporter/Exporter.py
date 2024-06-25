@@ -322,7 +322,7 @@ def convert_to_hw_resnet(model: ModelWrapper, cfg: build.DataflowBuildConfig):
 	model = model.transform(InferDataLayouts())
 	model = model.transform(convert.InferLabelSelectLayer())
 
-	model = tidy_up(model, cfg)
+	model = tidy_up(model)
 	model = model.transform(convert.InferAddStreamsLayer())
 	model = model.transform(convert.InferDuplicateStreamsLayer())
 
