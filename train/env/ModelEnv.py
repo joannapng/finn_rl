@@ -396,14 +396,15 @@ class ModelEnv(gym.Env):
                 
                 # reduce bitwidth in the hopes that maximum fps is achieved, start from the back
                 # where the layers typically have more neurons (should be changed to reducing bitwidth of bottleneck layer)
+                # reduce bitwidth in the hopes that maximum fps is achieved, start from the back
+                # where the layers typically have more neurons (should be changed to reducing bitwidth of bottleneck layer)
                 reduced = False
-                for idx in range(len(self.strategy) - 1, -1, -1):
-                    bit = self.strategy[idx]
-                    if bit > self.min_bit and bit > self.bound_list[idx][0]:
-                        self.strategy[idx] -= 1
-                        reduced = True
-                        print("Strategy: " + str(self.strategy))
-                        break
+                idx = np.lexsort((np.arange(len(self.strategy)), self.strategy))[::-1][0]
+                bit = self.strategy[idx]
+                if bit > self.min_bit and bit > self.bound_list[idx][0]:
+                    self.strategy[idx] -= 1
+                    reduced = True
+                    print("Strategy: " + str(self.strategy))
                 
                 if not reduced:
                     # not another opportunity to minimize bit width
