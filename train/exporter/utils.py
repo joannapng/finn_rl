@@ -39,7 +39,8 @@ def set_defaults(model):
 			# skip auto as well
 			allowed_values = inst.get_nodeattr_allowed_values("resType")
 			for v in allowed_values:
-				if v != "auto":
+				# do not use dsp as first choice
+				if v != "auto" and v != "dsp":
 					value = v
 
 			inst.set_nodeattr("resType", value)
