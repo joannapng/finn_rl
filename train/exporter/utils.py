@@ -278,12 +278,26 @@ def increase_folding(model, bottleneck_layer):
 			for simd_val in range(cur_simd + 1, max_simd + 1):
 				if (max_simd % simd_val) == 0:
 					node_inst.set_nodeattr("SIMD", simd_val)
+					if "hls" in op_type:
+						instream = node_inst.get_instream_width()
+						outstream = node_inst.get_outstream_width()
+						ret = max([instream, outstream])
+						if ret >= 8192:
+							node_inst.set_nodeattr("SIMD", cur_simd)
+							break
 					increased = True
 					break
 		elif cur_pe < max_pe:
 			for pe_val in range(cur_pe + 1, max_pe + 1):
 				if (max_pe % pe_val) == 0:
 					node_inst.set_nodeattr("PE", pe_val)
+					if "hls" in op_type:
+						instream = node_inst.get_instream_width()
+						outstream = node_inst.get_outstream_width()
+						ret = max([instream, outstream])
+						if ret >= 8192:
+							node_inst.set_nodeattr("PE", cur_pe)
+							break
 					increased = True
 					break
 	elif op_type in pe_ops:
@@ -293,6 +307,13 @@ def increase_folding(model, bottleneck_layer):
 			for pe_val in range(cur_pe + 1, max_pe + 1):
 				if (max_pe % pe_val) == 0:
 					node_inst.set_nodeattr("PE", pe_val)
+					if "hls" in op_type:
+						instream = node_inst.get_instream_width()
+						outstream = node_inst.get_outstream_width()
+						ret = max([instream, outstream])
+						if ret >= 8192:
+							node_inst.set_nodeattr("PE", cur_pe)
+							break
 					increased = True
 					break
 	elif op_type == "LabelSelect_hls":
@@ -303,6 +324,13 @@ def increase_folding(model, bottleneck_layer):
 			for pe_val in range(cur_pe + 1, max_pe + 1):
 				if (max_pe % pe_val) == 0:
 					node_inst.set_nodeattr("PE", pe_val)
+					if "hls" in op_type:
+						instream = node_inst.get_instream_width()
+						outstream = node_inst.get_outstream_width()
+						ret = max([instream, outstream])
+						if ret >= 8192:
+							node_inst.set_nodeattr("PE", cur_pe)
+							break
 					increased = True
 					break
 	elif op_type == "depthwise_op_exceptions":
@@ -317,12 +345,26 @@ def increase_folding(model, bottleneck_layer):
 				for pe_val in range(cur_pe + 1, max_pe + 1):
 					if (max_pe % pe_val) == 0:
 						node_inst.set_nodeattr("PE", pe_val)
+						if "hls" in op_type:
+							instream = node_inst.get_instream_width()
+							outstream = node_inst.get_outstream_width()
+							ret = max([instream, outstream])
+							if ret >= 8192:
+								node_inst.set_nodeattr("PE", cur_pe)
+								break
 						increased = True
 						break
 			elif cur_simd < max_simd:
 				for simd_val in range(cur_simd + 1, max_simd + 1):
 					if (max_simd % simd_val) == 0:
 						node_inst.set_nodeattr("SIMD", simd_val)
+						if "hls" in op_type:
+							instream = node_inst.get_instream_width()
+							outstream = node_inst.get_outstream_width()
+							ret = max([instream, outstream])
+							if ret >= 8192:
+								node_inst.set_nodeattr("SIMD", cur_simd)
+								break
 						increased = True
 						break
 
@@ -349,6 +391,13 @@ def increase_folding(model, bottleneck_layer):
 					for simd_val in range(cur_simd + 1, max_simd + 1):
 						if (max_simd % simd_val) == 0:
 							node_inst.set_nodeattr("SIMD", simd_val)
+							if "hls" in op_type:
+								instream = node_inst.get_instream_width()
+								outstream = node_inst.get_outstream_width()
+								ret = max([instream, outstream])
+								if ret >= 8192:
+									node_inst.set_nodeattr("SIMD", cur_simd)
+									break
 							increased = True
 							break
 					if op_type == "ConvolutionInputGenerator_rtl" and node_inst.get_nodeattr("SIMD") == max_simd:
@@ -360,6 +409,13 @@ def increase_folding(model, bottleneck_layer):
 				for simd_val in range(cur_simd + 1, max_simd + 1):
 					if (max_simd % simd_val) == 0:
 						node_inst.set_nodeattr("SIMD", simd_val)
+						if "hls" in op_type:
+							instream = node_inst.get_instream_width()
+							outstream = node_inst.get_outstream_width()
+							ret = max([instream, outstream])
+							if ret >= 8192:
+								node_inst.set_nodeattr("SIMD", cur_simd)
+								break
 						increased = True
 						break
 
