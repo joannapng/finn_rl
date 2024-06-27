@@ -1,6 +1,7 @@
 import os
 import json
 import torch
+import math
 
 from qonnx.core.modelwrapper import ModelWrapper
 from qonnx.custom_op.registry import getCustomOp
@@ -72,6 +73,13 @@ from finn.transformation.qonnx.quant_act_to_multithreshold import (
 platform_path = 'platforms'
 platform_files = {}
 platform_files['U250'] = f'{platform_path}/u250.json'
+
+RESOURCE_LIMITS = {
+	'BRAM_18K' : 0.8,
+	'LUT' : 0.7,
+	'URAM' : 0.8,
+	'DSP' : 0.8
+}
 
 def tidy_up(model):
 	model = model.transform(InferShapes())
@@ -147,7 +155,7 @@ def specialize_layers(model, fpga_part):
 	model = model.transform(InferDataTypes())
 	return model
 
-def set_folding(model, output_dir, board):
+def set_folding(model, output_dir, board, freq, target_fps):
 	model = model.transform(GiveUniqueNodeNames())
 	model = model.transform(GiveReadableTensorNames())
 
@@ -156,9 +164,10 @@ def set_folding(model, output_dir, board):
 	available_resources = json.load(f)['resources']
 
 	for resource in available_resources.keys():
-		available_resources[resource] *= 0.8
+		available_resources[resource] *= RESOURCE_LIMITS[resource]
+		available_resources[resource] = math.floor(available_resources[resource])
 	
-	model, max_cycles, avg_util, feasible = folding(model, available_resources)
+	model, max_cycles, avg_util, feasible = folding(model, available_resources, freq, target_fps)
 
 	if not feasible:
 		return model, 1000000, avg_util

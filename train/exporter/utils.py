@@ -25,6 +25,25 @@ def set_defaults(model):
 		if "SIMD" in attrs:
 			inst.set_nodeattr("SIMD", 1)
 
+		if "ram_style" in attrs:
+			allowed_values = inst.get_nodeattr_allowed_values("ram_style")
+
+			# skip auto to have accurate estimates and not wait for vivado hls estimates
+			for v in allowed_values:
+				if v != "auto":
+					value = v
+				
+			inst.set_nodeattr("ram_style", value)
+
+		if "resType" in attrs:
+			# skip auto as well
+			allowed_values = inst.get_nodeattr_allowed_values("resType")
+			for v in allowed_values:
+				if v != "auto":
+					value = v
+
+			inst.set_nodeattr("resType", value)
+
 	return model
 
 def estimate_resources(model):
@@ -436,7 +455,7 @@ def avg_utilization(model, available_resources):
 	
 	return avg_util, max_util
 
-def folding(model, available_resources):
+def folding(model, available_resources, freq, target_fps):
 	set_defaults(model)
 	prev_model = deepcopy(model)
 
@@ -451,6 +470,12 @@ def folding(model, available_resources):
 		cycles_per_layer = estimate_cycles(model)
 		sorted_cycles_per_layer = sorted(cycles_per_layer.items(), key = lambda x : x[1], reverse = True)
 		bottleneck_layer, latency = sorted_cycles_per_layer[0]
+		fps = freq * 10**6 / latency
+
+		if fps >= target_fps:
+			print(f'Target FPS met (achieved fps: {fps})')
+			break
+		
 		model, increased = increase_folding(model, bottleneck_layer)
 
 		print(f'New latency : {latency} cycles')
@@ -463,7 +488,7 @@ def folding(model, available_resources):
 
 	resources_per_layer = estimate_resources(model)
 	resources_total = aggregate_dict_keys(resources_per_layer)
-	print("Total resources: " + str(resources_total))
+	print("Total estimated resources: " + str(resources_total))
 	print("Available resources: " + str(available_resources))
 
 	cycles_per_layer = estimate_cycles(model)
