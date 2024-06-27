@@ -25,26 +25,6 @@ def set_defaults(model):
 		if "SIMD" in attrs:
 			inst.set_nodeattr("SIMD", 1)
 
-		if "ram_style" in attrs:
-			allowed_values = inst.get_nodeattr_allowed_values("ram_style")
-
-			# skip auto to have accurate estimates and not wait for vivado hls estimates
-			for v in allowed_values:
-				if v != "auto":
-					value = v
-				
-			inst.set_nodeattr("ram_style", value)
-
-		if "resType" in attrs:
-			# skip auto as well
-			allowed_values = inst.get_nodeattr_allowed_values("resType")
-			for v in allowed_values:
-				# do not use dsp as first choice
-				if v != "auto" and v != "dsp":
-					value = v
-
-			inst.set_nodeattr("resType", value)
-
 	return model
 
 def estimate_resources(model):
