@@ -4,7 +4,7 @@ import argparse
 from pretrain.trainer import Trainer
 from pretrain.utils import get_model_config
 
-model_names = ['LeNet5', 'resnet18', 'resnet34', 'resnet50', 'resnet100', 'resnet152', 'Simple']
+model_names = ['LeNet5', 'resnet18', 'resnet34', 'resnet50', 'resnet100', 'resnet152']
 
 parser = argparse.ArgumentParser(description = 'Pretraining model parameters')
 
@@ -17,14 +17,14 @@ parser.add_argument('--resume-from', default = None, help = 'If resume-from is n
 
 # Dataset Parameters
 parser.add_argument('--datadir', default = './data', help='Directory where datasets are stored (default: ./data)')
-parser.add_argument('--dataset', default = 'MNIST', choices = ['MNIST', 'CIFAR10'], help = 'Name of dataset (default: MNIST)')
+parser.add_argument('--dataset', default = 'CIFAR10', choices = ['MNIST', 'CIFAR10'], help = 'Name of dataset (default: CIFAR10)')
 parser.add_argument('--batch-size-training', default = 128, type = int, help = 'Batch size for training (default: 128)')
 parser.add_argument('--batch-size-validation', default = 64, type = int, help = 'Batch size for validation (default: 64)')
-parser.add_argument('--num-workers', default = 32, type = int, help = 'Num workers (default: 32)')
+parser.add_argument('--num-workers', default = 8, type = int, help = 'Num workers (default: 8)')
 parser.add_argument('--validation-split', default = 0.2, type = float, help = 'Training-Validation split (default: 0.2)')
 
 # Trainer Parameters
-parser.add_argument('--training-epochs', type = int, default = 10, help = 'Training epochs (default: 10)')
+parser.add_argument('--training-epochs', type = int, default = 100, help = 'Training epochs (default: 100)')
 parser.add_argument('--save-dir', default = './checkpoints', help = 'Directory to save model and logs (default: ./checkpoints)')
 parser.add_argument('--print_every', type = int, default = 100, help = 'How frequent to print progress (default: 100)')
 parser.add_argument('--checkpoint_every', type = int, default = 10, help = 'How many epochs to keep a checkpoint (default: 10)')

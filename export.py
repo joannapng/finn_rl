@@ -15,13 +15,17 @@ parser = argparse.ArgumentParser(description = 'Transform input onnx model to hw
 parser.add_argument('--model-name', required = True, type = str, help = 'Model name')
 parser.add_argument('--onnx-model', required = True, type = str, help = 'ONNX model to transform using FINN Compiler')
 parser.add_argument('--output-dir', required = False, default = '', type = None, help = 'Output directory')
-parser.add_argument('--synth-clk-period-ns', type = float, default = 5.0, help = 'Target clock period in ns')
+parser.add_argument('--synth-clk-period-ns', type = float, default = 3.33, help = 'Target clock period in ns')
 parser.add_argument('--board', default = "U250", help = "Name of target board")
 parser.add_argument('--shell-flow-type', default = "vitis_alveo", choices = ["vivado_zynq", "vitis_alveo"], help = "Target shell type")
 parser.add_argument('--input-file', default = 'input.npy', type = str, help = 'Input file for validation')
 parser.add_argument('--expected-output-file', default = 'expected_output.npy', type = str, help = 'Output file for validation')
 parser.add_argument('--folding-config-file', default = 'folding_config.json', type = str, help = 'Folding config file')
 
+parser.add_argument('--tidy-up-verification', action = argparse.BooleanOptionalAction, help = 'Perform verification after tidy-up transformation')
+parser.add_argument('--qonnx-to-finn-verification', action = argparse.BooleanOptionalAction, help = 'Perform verification after QONNXToFinn transformation')
+parser.add_argument('--streamlined-python-verification', action = argsparse.BooleanOptionalAction, help = 'Perform verification after streamlining')
+parser.add_argument('--folded-hls-cppsim', action = argparse.BooleanOptionalAction, help = 'Perform cpp simulation after folding')
 parser.add_argument('--rtlsim-performance', action=argparse.BooleanOptionalAction, help = 'Generate rtlsim performance reports')
 parser.add_argument('--rtlsim-verification', action=argparse.BooleanOptionalAction, help = 'Perform rtlsim verification (not recommended for large networks)')
 
@@ -32,7 +36,6 @@ streamline_functions = {
 	'resnet50' : streamline_resnet,
 	'resnet100' : streamline_resnet,
 	'resnet152' : streamline_resnet,
-	'Simple' : streamline_lenet,
 }
 
 convert_to_hw_functions = {
@@ -42,7 +45,6 @@ convert_to_hw_functions = {
 	'resnet50' : convert_to_hw_resnet,
 	'resnet100' : convert_to_hw_resnet,
 	'resnet152' : convert_to_hw_resnet,
-	'Simple' : convert_to_hw_lenet
 }
 
 def main():
@@ -61,8 +63,8 @@ def main():
 		build_cfg.DataflowOutputType.DEPLOYMENT_PACKAGE,
 	]
 
-	#if args.rtlsim_performance:
-		#generate_outputs.append(build_cfg.DataflowOutputType.RTLSIM_PERFORMANCE)
+	if args.rtlsim_performance:
+		generate_outputs.append(build_cfg.DataflowOutputType.RTLSIM_PERFORMANCE)
 
 	verify_steps = [
 		#build_cfg.VerificationStepType.QONNX_TO_FINN_PYTHON,
