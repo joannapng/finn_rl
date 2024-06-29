@@ -24,7 +24,7 @@ parser.add_argument('--folding-config-file', default = 'folding_config.json', ty
 
 parser.add_argument('--tidy-up-verification', action = argparse.BooleanOptionalAction, help = 'Perform verification after tidy-up transformation')
 parser.add_argument('--qonnx-to-finn-verification', action = argparse.BooleanOptionalAction, help = 'Perform verification after QONNXToFinn transformation')
-parser.add_argument('--streamlined-python-verification', action = argsparse.BooleanOptionalAction, help = 'Perform verification after streamlining')
+parser.add_argument('--streamlined-python-verification', action = argparse.BooleanOptionalAction, help = 'Perform verification after streamlining')
 parser.add_argument('--folded-hls-cppsim', action = argparse.BooleanOptionalAction, help = 'Perform cpp simulation after folding')
 parser.add_argument('--rtlsim-performance', action=argparse.BooleanOptionalAction, help = 'Generate rtlsim performance reports')
 parser.add_argument('--rtlsim-verification', action=argparse.BooleanOptionalAction, help = 'Perform rtlsim verification (not recommended for large networks)')
@@ -66,15 +66,21 @@ def main():
 	if args.rtlsim_performance:
 		generate_outputs.append(build_cfg.DataflowOutputType.RTLSIM_PERFORMANCE)
 
-	verify_steps = [
-		#build_cfg.VerificationStepType.QONNX_TO_FINN_PYTHON,
-		#build_cfg.VerificationStepType.TIDY_UP_PYTHON,
-		#build_cfg.VerificationStepType.STREAMLINED_PYTHON,
-		#build_cfg.VerificationStepType.FOLDED_HLS_CPPSIM,
-	]
+	verify_steps = []
+	if args.tidy_up_verification:
+		verify_steps.append(build_cfg.VerificationStepType.TIDY_UP_PYTHON)
 
-	#if args.rtlsim_verification:
-		#verify_steps.append(build_cfg.VerificationStepType.STITCHED_IP_RTLSIM)
+	if args.qonnx_to_finn_verification:
+		verify_steps.append(build_cfg.VerificationStepType.QONNX_TO_FINN_PYTHON)
+	
+	if args.streamlined_python_verification:
+		verify_steps.append(build_cfg.VerificationStepType.STREAMLINED_PYTHON)
+
+	if args.folded_hls_cppsim:
+		verify-steps.append(build_cfg.VerificationStepType.FOLDED_HLS_CPPSIM)
+
+	if args.rtlsim_verification:
+		verify_steps.append(build_cfg.VerificationStepType.STITCHED_IP_RTLSIM)
 
 	cfg_build = build.DataflowBuildConfig(
 		output_dir = output_dir,

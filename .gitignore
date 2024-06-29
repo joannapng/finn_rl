@@ -11,7 +11,6 @@ agents/*
 *.pkl
 checkpoints/*
 *.npy
-*.json
 logs/*
 logs
 LeNet5/

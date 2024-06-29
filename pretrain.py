@@ -4,13 +4,10 @@ import argparse
 from pretrain.trainer import Trainer
 from pretrain.utils import get_model_config
 
-model_names = ['LeNet5', 'resnet18', 'resnet34', 'resnet50', 'resnet100', 'resnet152']
-
 parser = argparse.ArgumentParser(description = 'Pretraining model parameters')
 
 # Model Parameters
-parser.add_argument('--model-name', default='resnet18', metavar='ARCH', choices=model_names,
-                    help = 'model_architecture: ' + ' | '.join(model_names) + ' (default: resnet18)')
+parser.add_argument('--model-name', default='resnet18', help = 'Target model name')
 parser.add_argument('--pretrained', action = 'store_true', default = False, help = 'Whether to use pretrained model (default: false)')
 parser.add_argument('--model-path', default = None, help = 'Path to pretrained model. Should be provided if pretrained is True (default: None)')
 parser.add_argument('--resume-from', default = None, help = 'If resume-from is not None, training resumes from specified checkpoint (default: None)')

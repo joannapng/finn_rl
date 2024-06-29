@@ -4,4 +4,3 @@ __all__ = ["LeNet5", "resnet", "Simple"]
 
 from .LeNet5 import *
 from .resnet import *
-from .Simple import *

@@ -23,13 +23,10 @@ rl_algorithms = {
     'TD3': TD3
 }
 
-model_names = ['LeNet5', 'resnet18', 'resnet34', 'resnet50', 'resnet100', 'resnet152']
-
 parser = argparse.ArgumentParser(description = 'Train RL Agent')
 
 # Model Parameters
-parser.add_argument('--model-name', default='resnet18', metavar='ARCH', choices=model_names,
-                    help = 'model_architecture: ' + ' | '.join(model_names) + ' (default: resnet18)')
+parser.add_argument('--model-name', default='resnet18', help = 'Target model name')
 parser.add_argument('--model-path', required = True, default = None, help = 'Path to pretrained model')
 
 # Dataset Parameters
