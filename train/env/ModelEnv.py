@@ -31,8 +31,6 @@ from ..exporter.Exporter import (
     streamline_resnet,
     convert_to_hw_resnet,
     streamline_lenet,
-    streamline_simple,
-    convert_to_hw_simple,
     convert_to_hw_lenet
 )
 
@@ -49,7 +47,6 @@ streamline_functions = {
     'resnet50' : streamline_resnet,
     'resnet100' : streamline_resnet,
     'resnet152' : streamline_resnet,
-    'Simple' : streamline_simple
 }
 
 convert_to_hw_functions = {
@@ -59,7 +56,6 @@ convert_to_hw_functions = {
     'resnet50' : convert_to_hw_resnet,
     'resnet100' : convert_to_hw_resnet,
     'resnet152' : convert_to_hw_resnet,
-    'Simple' : convert_to_hw_simple
 }
 
 class LayerTypes(IntEnum):
