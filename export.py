@@ -77,7 +77,7 @@ def main():
 		verify_steps.append(build_cfg.VerificationStepType.STREAMLINED_PYTHON)
 
 	if args.folded_hls_cppsim:
-		verify-steps.append(build_cfg.VerificationStepType.FOLDED_HLS_CPPSIM)
+		verify_steps.append(build_cfg.VerificationStepType.FOLDED_HLS_CPPSIM)
 
 	if args.rtlsim_verification:
 		verify_steps.append(build_cfg.VerificationStepType.STITCHED_IP_RTLSIM)
