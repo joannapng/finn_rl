@@ -21,15 +21,19 @@ bash run-docker.sh
 cd Thesis
 ```
 
-## Step 4: Pretrain LeNet5 on MNIST
+## Step 4: Pretrain LeNet5 on MNIST / ResNet18 on CIFAR10
 ```
 python pretrain.py --model-name LeNet5 --dataset MNIST --training-epochs 10
+python pretrain.py --model-name resnet18 --dataset CIFAR10 --training-epochs 30
 ```
 
 ## Step 5: Train agent on LeNet5
 ```
 mkdir LeNet5
 python train.py --model-name LeNet5 --dataset MNIST --model-path <path to model (should be inside checkpoints folder ending in _best.tar)> --freq 300 --target-fps 6000 --board U250 --num-episodes 30
+
+mkdir resnet18
+python train.py --model-name resnet18 --dataset CIFAR10 --model-path <path to model (should be inside checkpoints folder ending in _best.tar)> --freq 200 --target-fps 400 --board U250 --num-episodes 200
 ```
 ## Step 6: Test agent on LeNet5
 ```

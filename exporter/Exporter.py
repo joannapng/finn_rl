@@ -228,29 +228,6 @@ def streamline_lenet(model: ModelWrapper, cfg: build.DataflowBuildConfig):
 
 	return model
 
-def streamline_simple(model: ModelWrapper, cfg: build.DataflowBuildConfig):
-	model = model.transform(ConvertSubToAdd())
-	model = model.transform(ConvertDivToMul())
-
-	model = model.transform(collapse.CollapseRepeatedMul())
-	model = model.transform(absorb.AbsorbMulIntoMultiThreshold())
-	model = model.transform(absorb.AbsorbSignBiasIntoMultiThreshold())
-	model = model.transform(absorb.AbsorbAddIntoMultiThreshold())
-
-	model = model.transform(reorder.MoveScalarMulPastConv())
-	model = model.transform(absorb.AbsorbMulIntoMultiThreshold())
-	model = model.transform(collapse.CollapseRepeatedMul())
-	model = model.transform(reorder.MoveMulPastMaxPool())
-	model = model.transform(reorder.MoveScalarLinearPastInvariants())
-	model = model.transform(reorder.MoveScalarMulPastMatMul())
-	model = model.transform(absorb.AbsorbMulIntoMultiThreshold())
-	model = model.transform(absorb.AbsorbScalarMulAddIntoTopK())
-
-	if VerificationStepType.STREAMLINED_PYTHON in cfg._resolve_verification_steps():
-		verify_step(model, cfg, "streamlined_python", need_parent=False)
-
-
-	return model
 
 def streamline_resnet(model: ModelWrapper, cfg: build.DataflowBuildConfig):
 	model = model.transform(ConvertSubToAdd())
@@ -327,34 +304,6 @@ def convert_to_hw_resnet(model: ModelWrapper, cfg: build.DataflowBuildConfig):
 	model = model.transform(convert.InferDuplicateStreamsLayer())
 
 	model = model.transform(RoundAndClipThresholds())
-
-	return model
-
-def convert_to_hw_simple(model: ModelWrapper, cfg: build.DataflowBuildConfig):
-	model = model.transform(InferDataLayouts())
-	model = model.transform(convert.InferPool())
-
-	model = model.transform(LowerConvsToMatMul())
-	model = model.transform(convert.InferConvInpGen())
-	model = model.transform(convert.InferVectorVectorActivation())
-	model = model.transform(convert.InferBinaryMatrixVectorActivation())
-	model = model.transform(convert.InferQuantizedMatrixVectorActivation())
-
-	model = model.transform(absorb.AbsorbAddIntoMultiThreshold())
-	model = model.transform(absorb.AbsorbTransposeIntoMultiThreshold())
-	model = model.transform(absorb.AbsorbConsecutiveTransposes())
-
-	model = model.transform(InferDataLayouts())
-	model = model.transform(convert.InferThresholdingLayer())
-
-	model = model.transform(InferDataLayouts())
-	model = model.transform(convert.InferLabelSelectLayer())
-
-	model = model.transform(InferDataLayouts())
-	model = model.transform(RemoveCNVtoFCFlatten())
-
-	model = model.transform(RoundAndClipThresholds())
-	model = tidy_up(model)
 
 	return model
 
