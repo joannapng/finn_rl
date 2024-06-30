@@ -12,13 +12,13 @@ git checkout dev
 
 ## Step 2: Download project and add to FINN folder
 ```
-git clone https://github.com/joannapng/Thesis.git
+git clone https://github.com/joannapng/finn_rl.git
 ```
 
 ## Step 3: Run finn docker container
 ```	
 bash run-docker.sh
-cd Thesis
+cd finn_rl
 ```
 
 ## Step 4: Pretrain LeNet5 on MNIST / ResNet18 on CIFAR10

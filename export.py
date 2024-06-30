@@ -49,7 +49,6 @@ convert_to_hw_functions = {
 
 def main():
 	args = parser.parse_args()
-	#output_dir = build_dir + "/" + args.output_dir
 	output_dir = args.output_dir
 	streamline_function = streamline_functions[args.model_name]
 	convert_to_hw_function = convert_to_hw_functions[args.model_name]
