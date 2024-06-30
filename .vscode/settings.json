@@ -1,5 +1,0 @@
-{
-	"python.analysis.autoImportCompletions": true,
-	"python.languageServer": "Pylance",
-	"python.pythonPath": "/srv/homes/ipanagou/miniconda3/envs/quantization-pruning-finn/bin/python3"
-}
