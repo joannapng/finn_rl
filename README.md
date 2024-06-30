@@ -30,20 +30,25 @@ python pretrain.py --model-name resnet18 --dataset CIFAR10 --training-epochs 30
 ## Step 5: Train agent on LeNet5
 ```
 mkdir LeNet5
-python train.py --model-name LeNet5 --dataset MNIST --model-path <path to model (should be inside checkpoints folder ending in _best.tar)> --freq 300 --target-fps 6000 --board U250 --num-episodes 30
+python train.py --model-name LeNet5 --dataset MNIST --model-path <path to model (should be inside checkpoints folder ending in _best.tar)> --freq 200 --target-fps 6000 --board U250 --num-episodes 30
 
 mkdir resnet18
-python train.py --model-name resnet18 --dataset CIFAR10 --model-path <path to model (should be inside checkpoints folder ending in _best.tar)> --freq 200 --target-fps 400 --board U250 --num-episodes 200
+python train.py --model-name resnet18 --dataset CIFAR10 --model-path <path to model (should be inside checkpoints folder ending in _best.tar)> --freq 200 --target-fps 2500 --board U250 --num-episodes 200 # takes long, you can skip this step
 ```
 ## Step 6: Test agent on LeNet5
 ```
-python test.py --model-name LeNet5 --dataset MNIST --model-path <path to model> --freq 300 --target-fps 6000 --output-dir LeNet5 --onnx-output LeNet5 --agent-path agents/agent_LeNet5 --board U250
+python test.py --model-name LeNet5 --dataset MNIST --model-path <path to model> --freq 200 --target-fps 6000 --output-dir LeNet5 --onnx-output LeNet5 --agent-path agents/agent_LeNet5 --board U250
+
+python test.py --model-name resnet18 --dataset CIFAR10 --model-path <path to model> --freq 200 --target-fps 3000 --output-dir resnet18 --onnx-output resnet18 --board U250 --use-custom-strategy --strategy "[3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 4, 3, 3, 4, 3, 3, 3, 3, 3, 4, 3, 4, 3, 4, 4, 4, 4, 4, 4, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 4, 5, 5, 4, 5, 7]" # use custom strategy (one that was provided from agent during training)
 ```
 
 ## Step 7: Export model to HW
 ```
-python export.py --model-name LeNet5 --onnx-model LeNet5/LeNet5_quant.onnx --output-dir LeNet5 --input-file LeNet5/input.npy --expected-output-file LeNet5/expected_output_file.npy --folding-config-file LeNet5/folding_config.json --board U250
+python export.py --model-name LeNet5 --onnx-model LeNet5/LeNet5_quant.onnx --output-dir LeNet5 --input-file LeNet5/input.npy --expected-output-file LeNet5/expected_output.npy --folding-config-file LeNet5/folding_config.json --board U250 --synth-clk-period-ns 5.0
+
+python export.py --model-name resnet18 --onnx-model resnet18/resnet18_quant.onnx --output-dir resnet18 --input-file resnet18/input.npy --expected-output-file resnet18/expected_output.npy --folding-config-file resnet18/folding_config.json --board U250 --synth-clk-period-ns 5.0
 ```
+
 ## Step 8: 
 This project has not been tested with other models or platforms yet, but if you want to do so you have to add the model and the platform to the flow as so:
 
