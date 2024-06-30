@@ -57,6 +57,18 @@ python export.py --model-name resnet18 --onnx-model resnet18/resnet18_quant.onnx
 ```
 
 ## Step 8: Deploy accelerator
+Create an environment `pynq-env` according to instructions from [here](https://github.com/Xilinx/finn-examples?tab=readme-ov-file#alveo) and activate it with:
+```
+conda activate pynq-env
+```
+
+You also need to source the XRT environment with:
+```
+source <path to xrt>/setup.sh
+```
+
+To run the accelerator:
+
 ```
 cd <output-dir>/driver
 # to validate accuracy
