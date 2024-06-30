@@ -32,7 +32,7 @@ python pretrain.py --model-name LeNet5 --dataset MNIST --training-epochs 10
 python pretrain.py --model-name resnet18 --dataset CIFAR10 --training-epochs 30
 ```
 
-## Step 5: Train agent on LeNet5
+## Step 5: Train agent on LeNet5/ResNet18
 ```
 mkdir LeNet5
 python train.py --model-name LeNet5 --dataset MNIST --model-path <path to model (should be inside checkpoints folder ending in _best.tar)> --freq 200 --target-fps 6000 --board U250 --num-episodes 30
@@ -40,7 +40,7 @@ python train.py --model-name LeNet5 --dataset MNIST --model-path <path to model 
 mkdir resnet18
 python train.py --model-name resnet18 --dataset CIFAR10 --model-path <path to model (should be inside checkpoints folder ending in _best.tar)> --freq 200 --target-fps 2500 --board U250 --num-episodes 200 # takes long, you can skip this step
 ```
-## Step 6: Test agent on LeNet5
+## Step 6: Test agent on LeNet5/ResNet18
 ```
 python test.py --model-name LeNet5 --dataset MNIST --model-path <path to model> --freq 200 --target-fps 6000 --output-dir LeNet5 --onnx-output LeNet5 --agent-path agents/agent_LeNet5 --board U250
 
