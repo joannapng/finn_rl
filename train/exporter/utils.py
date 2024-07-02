@@ -432,8 +432,8 @@ def avg_utilization(model, available_resources):
 		util[resource] = (resources_total[resource]) / available_resources[resource]
 		avg_util += 1 / len(resources_total.keys()) * util[resource]
 
-		if util > max_util:
-			max_util = util
+		if util[resource] > max_util:
+			max_util = util[resource]
 	
 	return avg_util, max_util, util
 
