@@ -246,7 +246,7 @@ class ModelEnv(gym.Env):
 
         if self.is_final_layer():
             print("Strategy: " + str(self.strategy))
-            fps, avg_util = self.final_action_wall()
+            fps, avg_util, util = self.final_action_wall()
             self.model = self.quantizer.quantize_model(self.model,
                                             self.strategy,
                                             self.quantizable_idx,
@@ -272,7 +272,14 @@ class ModelEnv(gym.Env):
             
             obs = self.layer_embedding[self.cur_ind, :].copy()
             done = True
-            info = {'accuracy' : acc, 'fps' : fps, 'avg_util' : avg_util, 'strategy' : self.strategy}
+            info = {'accuracy' : acc, 
+                    'fps' : fps, 
+                    'avg_util' : avg_util, 
+                    'lut_util' : util['LUT'],
+                    'bram_util' : util['BRAM_18K'],
+                    'uram_util' : util['URAM'],
+                    'dsp_util' : util['DSP'],
+                    'strategy' : self.strategy}
             return obs, reward, done, False, info 
         
         reward = 0 
@@ -284,7 +291,14 @@ class ModelEnv(gym.Env):
         
         done = False
         obs = self.layer_embedding[self.cur_ind, :].copy()
-        info = {'accuracy' : 0.0, 'fps' : 0.0, 'avg_util' : 0.0, 'strategy' : self.strategy}
+        info = {'accuracy' : 0.0, 
+                    'fps' : 0.0, 
+                    'avg_util' : 0.0, 
+                    'lut_util' : 0.0,
+                    'bram_util' : 0.0,
+                    'uram_util' : 0.0,
+                    'dsp_util' : 0.0,
+                    'strategy' : self.strategy}
         return obs, reward, done, False, info
 
     def step_(self, action):
@@ -374,7 +388,7 @@ class ModelEnv(gym.Env):
             model = convert_to_hw_function(model)
             model = create_dataflow_partition(model)
             model = specialize_layers(model, self.args.fpga_part)
-            model, cycles, avg_util = set_folding(model, self.args.output_dir, self.args.board, self.args.freq, self.args.target_fps)
+            model, cycles, avg_util, util = set_folding(model, self.args.output_dir, self.args.board, self.args.freq, self.args.target_fps)
 
             fps = self.args.freq * 10**6 / cycles
 
@@ -392,8 +406,6 @@ class ModelEnv(gym.Env):
                 
                 # reduce bitwidth in the hopes that maximum fps is achieved, start from the back
                 # where the layers typically have more neurons (should be changed to reducing bitwidth of bottleneck layer)
-                # reduce bitwidth in the hopes that maximum fps is achieved, start from the back
-                # where the layers typically have more neurons (should be changed to reducing bitwidth of bottleneck layer)
                 reduced = False
                 idx = np.lexsort((np.arange(len(self.strategy)), self.strategy))[::-1][0]
                 bit = self.strategy[idx]
@@ -406,7 +418,7 @@ class ModelEnv(gym.Env):
                     # not another opportunity to minimize bit width
                     break
 
-        return fps, avg_util
+        return fps, avg_util, util
     
     def maximum_fps(self):
         strategy = [self.bound_list[i][0] for i in range(len(self.quantizable_idx))]
@@ -439,7 +451,7 @@ class ModelEnv(gym.Env):
         model = convert_to_hw_function(model)
         model = create_dataflow_partition(model)
         model = specialize_layers(model, self.args.fpga_part)
-        model, cycles, _ = set_folding(model, self.args.output_dir, self.args.board, self.args.freq, self.args.target_fps)
+        model, cycles, _, util = set_folding(model, self.args.output_dir, self.args.board, self.args.freq, self.args.target_fps)
         fps = self.args.freq * 10**6 / cycles
 
         print(f'Maximum achievable fps at {self.args.freq} MHz: {fps} fps')

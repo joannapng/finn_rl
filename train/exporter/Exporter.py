@@ -3,6 +3,7 @@ import json
 import torch
 import math
 
+from copy import deepcopy
 from qonnx.core.modelwrapper import ModelWrapper
 from qonnx.custom_op.registry import getCustomOp
 from qonnx.transformation.merge_onnx_models import MergeONNXModels
@@ -162,15 +163,15 @@ def set_folding(model, output_dir, board, freq, target_fps):
 	model = set_defaults(model)
 	f = open(platform_files[board], 'r')
 	available_resources = json.load(f)['resources']
+	usable_resources = {}
 
 	for resource in available_resources.keys():
-		available_resources[resource] *= RESOURCE_LIMITS[resource]
-		available_resources[resource] = math.floor(available_resources[resource])
+		usable_resources[resource] = math.floor(available_resources[resource] * RESOURCE_LIMITS[resource])
 	
-	model, max_cycles, avg_util, feasible = folding(model, available_resources, freq, target_fps)
+	model, max_cycles, avg_util, util, feasible = folding(model, usable_resources, freq, target_fps)
 
 	if not feasible:
-		return model, 1000000, avg_util
+		return model, 1000000, avg_util, util
 	else:
 		hw_attrs = [
 		"PE",
@@ -187,7 +188,7 @@ def set_folding(model, output_dir, board, freq, target_fps):
 		]
 
 		extract_model_config_to_json(model, os.path.join(output_dir, "folding_config.json"), hw_attrs)
-		return model, max_cycles, avg_util
+		return model, max_cycles, avg_util, util
 
 def minimize_bit_width(model):
 	model = model.transform(MinimizeWeightBitWidth())

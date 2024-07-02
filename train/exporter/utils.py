@@ -424,17 +424,18 @@ def increase_folding(model, bottleneck_layer):
 def avg_utilization(model, available_resources):
 	resources_per_layer = estimate_resources(model)
 	resources_total = aggregate_dict_keys(resources_per_layer)
+	util = {}
 
 	avg_util = 0
 	max_util = 0
 	for resource in resources_total.keys():
-		util = (resources_total[resource]) / available_resources[resource]
-		avg_util += 1 / len(resources_total.keys()) * util
+		util[resource] = (resources_total[resource]) / available_resources[resource]
+		avg_util += 1 / len(resources_total.keys()) * util[resource]
 
 		if util > max_util:
 			max_util = util
 	
-	return avg_util, max_util
+	return avg_util, max_util, util
 
 def folding(model, available_resources, freq, target_fps):
 	set_defaults(model)
@@ -443,8 +444,8 @@ def folding(model, available_resources, freq, target_fps):
 	model, feasible = isFeasible(model, available_resources)
 
 	if not feasible:
-		avg_util, max_util = avg_utilization(model, available_resources)
-		return model, 0.0, avg_util, False
+		avg_util, max_util, util = avg_utilization(model, available_resources)
+		return model, 0.0, avg_util, util, False
 
 	while feasible:
 		prev_model = deepcopy(model)
@@ -474,5 +475,5 @@ def folding(model, available_resources, freq, target_fps):
 
 	cycles_per_layer = estimate_cycles(model)
 	max_cycles = max(cycles_per_layer.items(), key = lambda x : x[1])[1]
-	avg_util, _ = avg_utilization(model, available_resources)
-	return model, max_cycles, avg_util, True
+	avg_util, _, util = avg_utilization(model, available_resources)
+	return model, max_cycles, avg_util, util, True
