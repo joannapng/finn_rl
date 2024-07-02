@@ -437,11 +437,11 @@ def avg_utilization(model, available_resources):
 	
 	return avg_util, max_util, util
 
-def folding(model, available_resources, freq, target_fps):
+def folding(model, usable_resources, freq, target_fps, available_resources):
 	set_defaults(model)
 	prev_model = deepcopy(model)
 
-	model, feasible = isFeasible(model, available_resources)
+	model, feasible = isFeasible(model, usable_resources)
 
 	if not feasible:
 		avg_util, max_util, util = avg_utilization(model, available_resources)
@@ -464,14 +464,14 @@ def folding(model, available_resources, freq, target_fps):
 		if not increased:
 			break
 
-		model, feasible = isFeasible(model, available_resources)
+		model, feasible = isFeasible(model, usable_resources)
 	
 	model = deepcopy(prev_model)
 
 	resources_per_layer = estimate_resources(model)
 	resources_total = aggregate_dict_keys(resources_per_layer)
 	print("Total estimated resources: " + str(resources_total))
-	print("Available resources: " + str(available_resources))
+	print("Available resources: " + str(usable_resources))
 
 	cycles_per_layer = estimate_cycles(model)
 	max_cycles = max(cycles_per_layer.items(), key = lambda x : x[1])[1]

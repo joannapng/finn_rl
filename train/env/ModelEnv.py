@@ -307,7 +307,7 @@ class ModelEnv(gym.Env):
 
         if self.is_final_layer():
             print("Strategy: " + str(self.strategy))
-            fps, avg_util = self.final_action_wall()
+            fps, avg_util, util = self.final_action_wall()
             self.model = self.quantizer.quantize_model(self.model,
                                             self.strategy,
                                             self.quantizable_idx,
@@ -332,7 +332,14 @@ class ModelEnv(gym.Env):
                 self.best_reward = reward
             
             done = True
-            info = {'accuracy' : acc, 'fps' : fps, 'avg_util' : avg_util, 'strategy' : self.strategy}
+            info = {'accuracy' : acc, 
+                'fps' : fps, 
+                'avg_util' : avg_util, 
+                'lut_util' : util['LUT'],
+                'bram_util' : util['BRAM_18K'],
+                'uram_util' : util['URAM'],
+                'dsp_util' : util['DSP'],
+                'strategy' : self.strategy}
             return done, info 
         
         reward = 0 
@@ -341,7 +348,14 @@ class ModelEnv(gym.Env):
         self.index_to_quantize = self.quantizable_idx[self.cur_ind]
 
         done = False
-        info = {'accuracy' : 0.0, 'fps' : 0.0, 'avg_util' : 0.0, 'strategy' : self.strategy}
+        info = {'accuracy' : 0.0, 
+                    'fps' : 0.0, 
+                    'avg_util' : 0.0, 
+                    'lut_util' : 0.0,
+                    'bram_util' : 0.0,
+                    'uram_util' : 0.0,
+                    'dsp_util' : 0.0,
+                    'strategy' : 0.0}
         return done, info
     
     def reward(self, acc):

@@ -168,7 +168,7 @@ def set_folding(model, output_dir, board, freq, target_fps):
 	for resource in available_resources.keys():
 		usable_resources[resource] = math.floor(available_resources[resource] * RESOURCE_LIMITS[resource])
 	
-	model, max_cycles, avg_util, util, feasible = folding(model, usable_resources, freq, target_fps)
+	model, max_cycles, avg_util, util, feasible = folding(model, usable_resources, freq, target_fps, available_resources)
 
 	if not feasible:
 		return model, 1000000, avg_util, util

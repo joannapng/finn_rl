@@ -92,7 +92,7 @@ def main():
     env = Monitor(
         ModelEnv(args, get_model_config(args.dataset)),
         filename = 'monitor.csv',
-        info_keywords=('accuracy', 'fps', 'avg_util', 'strategy')
+        info_keywords=('accuracy', 'fps', 'avg_util', 'lut_util', 'bram_util', 'dsp_util', 'uram_util', 'strategy')
     )
 
     n_actions = env.action_space.shape[-1]
