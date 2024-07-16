@@ -156,10 +156,8 @@ def reduceLUTUsage(model, resources_per_layer, available_resources, max_iters = 
 				
 				if ram_style == "distributed":
 					node_inst.set_nodeattr("ram_style", "ultra")
-					node_inst.set_nodeattr("runtime_writeable_weights", 1)
 					if node_inst.uram_efficiency_estimation() < 0.1:
 						node_inst.set_nodeattr("ram_style", "block")
-						node_inst.set_nodeattr("runtime_writeable_weights", 0)
 					break
 			elif op_type == "Thresholding_hls":
 				ram_style = node_inst.get_nodeattr("ram_style")

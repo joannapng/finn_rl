@@ -15,3 +15,6 @@ logs/*
 logs
 LeNet5/
 resnet18/
+MobileNet/
+MobileNet_build/
+*.ipynb

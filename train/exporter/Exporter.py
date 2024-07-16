@@ -168,7 +168,7 @@ def set_folding(model, output_dir, board, freq, target_fps):
 		available_resources[resource] = math.floor(available_resources[resource])
 	
 	model, max_cycles, avg_util, feasible = folding(model, available_resources, freq, target_fps)
-
+	print(feasible)
 	if not feasible:
 		return model, 1000000, avg_util
 	else:
@@ -263,6 +263,7 @@ def streamline_resnet(model):
 
 	return model
 
+
 def convert_to_hw_resnet(model):
 	model = model.transform(InferDataLayouts())
 	model = model.transform(convert.InferGlobalAccPoolLayer())
@@ -328,6 +329,60 @@ def convert_to_hw_lenet(model):
 
 	return model
 	
+def streamline_mobilenet(model):
+	model = model.transform(ConvertSubToAdd())
+	model = model.transform(ConvertDivToMul())
+	model = model.transform(absorb.AbsorbAddIntoMultiThreshold())
+	model = model.transform(absorb.AbsorbSignBiasIntoMultiThreshold())
+	
+	model = model.transform(collapse.CollapseRepeatedMul())
+	model = model.transform(absorb.AbsorbMulIntoMultiThreshold())
+	model = model.transform(absorb.AbsorbAddIntoMultiThreshold())
+
+	model = model.transform(reorder.MoveScalarMulPastConv())
+	model = model.transform(reorder.MoveScalarMulPastMatMul())
+	model = model.transform(absorb.AbsorbMulIntoMultiThreshold())
+	model = model.transform(collapse.CollapseRepeatedMul())
+
+	model = model.transform(reorder.MoveScalarLinearPastInvariants())
+	model = model.transform(absorb.AbsorbMulIntoMultiThreshold())
+	model = model.transform(reorder.MoveScalarMulPastMatMul())
+	model = model.transform(absorb.AbsorbMulIntoMultiThreshold())
+	model = model.transform(absorb.AbsorbScalarMulAddIntoTopK())
+
+	model = model.transform(absorb.AbsorbTransposeIntoMultiThreshold())
+	model = model.transform(RoundAndClipThresholds())
+	model = model.transform(InferDataLayouts())
+	model = model.transform(RemoveUnusedTensors())
+
+	return model
+
+def convert_to_hw_mobilenet(model):
+	model = model.transform(InferDataLayouts())
+	model = model.transform(convert.InferGlobalAccPoolLayer())
+
+	model = model.transform(absorb.AbsorbTransposeIntoFlatten())
+	model = model.transform(reorder.MoveScalarLinearPastInvariants())
+
+	model = model.transform(absorb.AbsorbMulIntoMultiThreshold())
+	model = model.transform(LowerConvsToMatMul())
+	model = model.transform(convert.InferConvInpGen())
+	model = model.transform(convert.InferVectorVectorActivation())
+	model = model.transform(convert.InferBinaryMatrixVectorActivation())
+	model = model.transform(convert.InferQuantizedMatrixVectorActivation())
+
+	model = model.transform(absorb.AbsorbTransposeIntoMultiThreshold())
+	model = model.transform(absorb.AbsorbConsecutiveTransposes())
+
+	model = model.transform(InferDataLayouts())
+	model = model.transform(RoundAndClipThresholds())
+	model = model.transform(convert.InferThresholdingLayer())
+	model = model.transform(RemoveCNVtoFCFlatten())
+	model = model.transform(InferDataLayouts())
+	model = model.transform(convert.InferLabelSelectLayer())
+
+	return model
+
 def name_nodes(model):
 	model = model.transform(GiveUniqueNodeNames())
 	model = model.transform(GiveReadableTensorNames())

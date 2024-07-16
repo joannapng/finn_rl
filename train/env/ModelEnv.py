@@ -31,7 +31,9 @@ from ..exporter.Exporter import (
     streamline_resnet,
     convert_to_hw_resnet,
     streamline_lenet,
-    convert_to_hw_lenet
+    convert_to_hw_lenet,
+    streamline_mobilenet,
+    convert_to_hw_mobilenet,
 )
 
 from ..utils import measure_model
@@ -47,6 +49,7 @@ streamline_functions = {
     'resnet50' : streamline_resnet,
     'resnet100' : streamline_resnet,
     'resnet152' : streamline_resnet,
+    'MobileNet' : streamline_mobilenet
 }
 
 convert_to_hw_functions = {
@@ -56,6 +59,7 @@ convert_to_hw_functions = {
     'resnet50' : convert_to_hw_resnet,
     'resnet100' : convert_to_hw_resnet,
     'resnet152' : convert_to_hw_resnet,
+    'MobileNet' : convert_to_hw_mobilenet
 }
 
 class LayerTypes(IntEnum):

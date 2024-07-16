@@ -333,6 +333,63 @@ def convert_to_hw_lenet(model: ModelWrapper, cfg: build.DataflowBuildConfig):
 
 	return model
 
+def streamline_mobilenet(model: ModelWrapper, cfg: build.DataflowBuildConfig):
+	model = model.transform(ConvertSubToAdd())
+	model = model.transform(ConvertDivToMul())
+	model = model.transform(absorb.AbsorbAddIntoMultiThreshold())
+	model = model.transform(absorb.AbsorbSignBiasIntoMultiThreshold())
+	
+	model = model.transform(collapse.CollapseRepeatedMul())
+	model = model.transform(absorb.AbsorbMulIntoMultiThreshold())
+	model = model.transform(absorb.AbsorbAddIntoMultiThreshold())
+
+	model = model.transform(reorder.MoveScalarMulPastConv())
+	model = model.transform(reorder.MoveScalarMulPastMatMul())
+	model = model.transform(absorb.AbsorbMulIntoMultiThreshold())
+	model = model.transform(collapse.CollapseRepeatedMul())
+
+	model = model.transform(reorder.MoveScalarLinearPastInvariants())
+	model = model.transform(absorb.AbsorbMulIntoMultiThreshold())
+	model = model.transform(reorder.MoveScalarMulPastMatMul())
+	model = model.transform(absorb.AbsorbMulIntoMultiThreshold())
+	model = model.transform(absorb.AbsorbScalarMulAddIntoTopK())
+
+	model = model.transform(absorb.AbsorbTransposeIntoMultiThreshold())
+	model = model.transform(RoundAndClipThresholds())
+	model = model.transform(InferDataLayouts())
+	model = model.transform(RemoveUnusedTensors())
+
+	if VerificationStepType.STREAMLINED_PYTHON in cfg._resolve_verification_steps():
+		verify_step(model, cfg, "streamlined_python", need_parent=False)
+
+	return model
+
+def convert_to_hw_mobilenet(model: ModelWrapper, cfg: build.DataflowBuildConfig):
+	model = model.transform(InferDataLayouts())
+	model = model.transform(convert.InferGlobalAccPoolLayer())
+
+	model = model.transform(absorb.AbsorbTransposeIntoFlatten())
+	model = model.transform(reorder.MoveScalarLinearPastInvariants())
+
+	model = model.transform(absorb.AbsorbMulIntoMultiThreshold())
+	model = model.transform(LowerConvsToMatMul())
+	model = model.transform(convert.InferConvInpGen())
+	model = model.transform(convert.InferVectorVectorActivation())
+	model = model.transform(convert.InferBinaryMatrixVectorActivation())
+	model = model.transform(convert.InferQuantizedMatrixVectorActivation())
+
+	model = model.transform(absorb.AbsorbTransposeIntoMultiThreshold())
+	model = model.transform(absorb.AbsorbConsecutiveTransposes())
+
+	model = model.transform(InferDataLayouts())
+	model = model.transform(RoundAndClipThresholds())
+	model = model.transform(convert.InferThresholdingLayer())
+	model = model.transform(RemoveCNVtoFCFlatten())
+	model = model.transform(InferDataLayouts())
+	model = model.transform(convert.InferLabelSelectLayer())
+
+	return model
+
 def name_nodes(model: ModelWrapper, cfg: build.DataflowBuildConfig):
 	model = model.transform(GiveUniqueNodeNames())
 	model = model.transform(GiveReadableTensorNames())

@@ -3,7 +3,7 @@ import argparse
 from exporter.Exporter import (preprocessing, postprocessing,
 							   make_input_channels_last, streamline_resnet, 
 							   convert_to_hw_resnet, name_nodes, streamline_lenet,
-							   convert_to_hw_lenet)
+							   convert_to_hw_lenet, streamline_mobilenet, convert_to_hw_mobilenet)
 
 import finn.builder.build_dataflow as build
 import finn.builder.build_dataflow_config as build_cfg
@@ -36,6 +36,7 @@ streamline_functions = {
 	'resnet50' : streamline_resnet,
 	'resnet100' : streamline_resnet,
 	'resnet152' : streamline_resnet,
+	'MobileNet' : streamline_mobilenet,
 }
 
 convert_to_hw_functions = {
@@ -45,6 +46,7 @@ convert_to_hw_functions = {
 	'resnet50' : convert_to_hw_resnet,
 	'resnet100' : convert_to_hw_resnet,
 	'resnet152' : convert_to_hw_resnet,
+	'MobileNet' : convert_to_hw_mobilenet
 }
 
 def main():

@@ -11,14 +11,15 @@ from torchvision.datasets import CIFAR10, MNIST
 
 from ..logger import Logger
 from ..utils import *
-from ..models import LeNet5, ResNet18, ResNet34, ResNet50, ResNet101, ResNet152
+from ..models import LeNet5, ResNet18, ResNet34, ResNet50, ResNet101, ResNet152, MobileNet
 
 networks = {'LeNet5' : LeNet5,
 			'resnet18' : ResNet18, 
 			'resnet34' : ResNet34,
 			'resnet50' : ResNet50,
 			'resnet101' : ResNet101,
-			'resnet152' : ResNet152}
+			'resnet152' : ResNet152,
+			'MobileNet' : MobileNet}
 
 class Trainer(object):
 	def __init__(self, args, model_config):
