@@ -7,6 +7,7 @@ We provide instructions on how to run for model LeNet5. ResNets models are also 
 ```
 git clone https://github.com/joannapng/finn.git
 cd finn
+git checkout dev
 ```
 
 ## Step 2: Download project and add to FINN folder
