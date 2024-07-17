@@ -378,7 +378,7 @@ class ModelEnv(gym.Env):
             model = convert_to_hw_function(model)
             model = create_dataflow_partition(model)
             model = specialize_layers(model, self.args.fpga_part)
-            model, cycles, avg_util = set_folding(model, self.args.output_dir, self.args.board, self.args.freq, self.args.target_fps)
+            model, cycles, avg_util = set_folding(model, self.args.output_dir, self.args.board_file, self.args.freq, self.args.target_fps)
 
             fps = self.args.freq * 10**6 / cycles
 
@@ -443,7 +443,7 @@ class ModelEnv(gym.Env):
         model = convert_to_hw_function(model)
         model = create_dataflow_partition(model)
         model = specialize_layers(model, self.args.fpga_part)
-        model, cycles, _ = set_folding(model, self.args.output_dir, self.args.board, self.args.freq, self.args.target_fps)
+        model, cycles, _ = set_folding(model, self.args.output_dir, self.args.board_file, self.args.freq, self.args.target_fps)
         fps = self.args.freq * 10**6 / cycles
 
         print(f'Maximum achievable fps at {self.args.freq} MHz: {fps} fps')

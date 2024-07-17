@@ -64,6 +64,7 @@ parser.add_argument('--seed', default = 234, type = int, help = 'Seed to reprodu
 
 # Design Parameters
 parser.add_argument('--board', default = "U250", help = "Name of target board (default: U250)")
+parser.add_argument('--board-file', default = 'platforms/u250.json', help = "Name of file with resources (default: platforms/u250.json)")
 parser.add_argument('--shell-flow-type', default = "vitis_alveo", choices = ["vivado_zynq", "vitis_alveo"], help = "Target shell type (default: vitis_alveo)")
 parser.add_argument('--freq', type = float, default = 300.0, help = 'Frequency in MHz (default: 300)')
 parser.add_argument('--max-freq', type = float, default = 300.0, help = 'Maximum device frequency in MHz (default: 300)')

@@ -70,9 +70,6 @@ from finn.transformation.qonnx.quant_act_to_multithreshold import (
 	default_filter_function_generator,
 )
 
-platform_path = 'platforms'
-platform_files = {}
-platform_files['U250'] = f'{platform_path}/u250.json'
 
 RESOURCE_LIMITS = {
 	'BRAM_18K' : 0.8,
@@ -155,12 +152,12 @@ def specialize_layers(model, fpga_part):
 	model = model.transform(InferDataTypes())
 	return model
 
-def set_folding(model, output_dir, board, freq, target_fps):
+def set_folding(model, output_dir, board_file, freq, target_fps):
 	model = model.transform(GiveUniqueNodeNames())
 	model = model.transform(GiveReadableTensorNames())
 
 	model = set_defaults(model)
-	f = open(platform_files[board], 'r')
+	f = open(board_file, 'r')
 	available_resources = json.load(f)['resources']
 
 	for resource in available_resources.keys():
@@ -168,7 +165,6 @@ def set_folding(model, output_dir, board, freq, target_fps):
 		available_resources[resource] = math.floor(available_resources[resource])
 	
 	model, max_cycles, avg_util, feasible = folding(model, available_resources, freq, target_fps)
-	print(feasible)
 	if not feasible:
 		return model, 1000000, avg_util
 	else:
