@@ -11,7 +11,7 @@ from qonnx.transformation.general import (
 
 from copy import deepcopy
 
-def set_defaults(model):
+def set_defaults(model, slr):
 	model = model.transform(GiveUniqueNodeNames())
 	model = model.transform(GiveReadableTensorNames())
 
@@ -24,6 +24,9 @@ def set_defaults(model):
 		
 		if "SIMD" in attrs:
 			inst.set_nodeattr("SIMD", 1)
+
+		if "slr" in attrs:
+			inst.set_nodeattr("slr", slr)
 
 	return model
 
@@ -434,8 +437,8 @@ def avg_utilization(model, available_resources):
 	
 	return avg_util, max_util
 
-def folding(model, available_resources, freq, target_fps):
-	set_defaults(model)
+def folding(model, available_resources, freq, target_fps, slr):
+	set_defaults(model, slr)
 	prev_model = deepcopy(model)
 
 	model, feasible = isFeasible(model, available_resources)

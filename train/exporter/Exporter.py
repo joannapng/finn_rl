@@ -152,11 +152,11 @@ def specialize_layers(model, fpga_part):
 	model = model.transform(InferDataTypes())
 	return model
 
-def set_folding(model, output_dir, board_file, freq, target_fps):
+def set_folding(model, output_dir, board_file, freq, target_fps, slr):
 	model = model.transform(GiveUniqueNodeNames())
 	model = model.transform(GiveReadableTensorNames())
 
-	model = set_defaults(model)
+	model = set_defaults(model, slr)
 	f = open(board_file, 'r')
 	available_resources = json.load(f)['resources']
 
@@ -164,7 +164,7 @@ def set_folding(model, output_dir, board_file, freq, target_fps):
 		available_resources[resource] *= RESOURCE_LIMITS[resource]
 		available_resources[resource] = math.floor(available_resources[resource])
 	
-	model, max_cycles, avg_util, feasible = folding(model, available_resources, freq, target_fps)
+	model, max_cycles, avg_util, feasible = folding(model, available_resources, freq, target_fps, slr)
 	if not feasible:
 		return model, 1000000, avg_util
 	else:
@@ -179,7 +179,8 @@ def set_folding(model, output_dir, board_file, freq, target_fps):
 		"depth_trigger_uram",
 		"depth_trigger_bram",
 		"inFIFODepths",
-		"outFIFODepths"
+		"outFIFODepths",
+		"slr"
 		]
 
 		extract_model_config_to_json(model, os.path.join(output_dir, "folding_config.json"), hw_attrs)
