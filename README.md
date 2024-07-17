@@ -44,7 +44,7 @@ python train.py --model-name resnet18 --dataset CIFAR10 --model-path <path to mo
 ```
 python test.py --model-name LeNet5 --dataset MNIST --model-path <path to model> --freq 200 --target-fps 6000 --output-dir LeNet5 --onnx-output LeNet5 --agent-path agents/agent_LeNet5 --board U250
 
-python test.py --model-name resnet18 --dataset CIFAR10 --model-path <path to model> --freq 200 --target-fps 2500 --output-dir resnet18 --onnx-output resnet18 --board U250 --use-custom-strategy --strategy "[4, 4, 4, 4, 4, 4, 3, 5, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 3, 4, 3, 4, 4, 4, 3, 3, 3, 4, 3, 3, 4, 3, 4, 4, 4, 3, 3, 4, 4, 3, 3, 3, 3, 3, 3, 3, 4, 3, 3]" --finetuning-epochs 3 # use custom strategy (one that was provided from agent during training)
+python test.py --model-name resnet18 --dataset CIFAR10 --model-path <path to model> --freq 200 --target-fps 2500 --output-dir resnet18 --onnx-output resnet18 --board U250 --use-custom-strategy --act-bit-width 5 --weight-bit-width 5
 ```
 
 ## Step 7: Export model to HW

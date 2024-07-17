@@ -14,11 +14,11 @@ from copy import deepcopy
 import multiprocessing as mp
 
 rl_algorithms = {
-    'A2C': A2C,
-    'DDPG': DDPG,
-    'PPO': PPO,
-    'SAC': SAC,
-    'TD3': TD3
+	'A2C': A2C,
+	'DDPG': DDPG,
+	'PPO': PPO,
+	'SAC': SAC,
+	'TD3': TD3
 }
 
 
@@ -74,7 +74,7 @@ parser.add_argument('--output-dir', type = str, default = 'Model', help = 'Outpu
 parser.add_argument('--onnx-output', type = str, default = 'model', help = 'Onnx output name (default: model)')
 
 parser.add_argument('--use-custom-strategy', action = 'store_true', default = False, help = 'Use custom quantization strategy (overrides agent parameter, default: False)')
-parser.add_argument('--strategy', type = str, default = '', help = 'Custom quantization strategy (example input: \"[7, 8, 1, 3, 1, 4]\")')
+#parser.add_argument('--strategy', type = str, default = '', help = 'Custom quantization strategy (example input: \"[7, 8, 1, 3, 1, 4]\")')
 
 args = parser.parse_args()
 args.fpga_part = part_map[args.board]
@@ -84,7 +84,7 @@ random.seed(args.seed)
 torch.manual_seed(args.seed)
 
 if args.device == 'GPU' and torch.cuda.is_available():
-    torch.cuda.manual_seed_all(args.seed)
+	torch.cuda.manual_seed_all(args.seed)
 
 # create environment
 env = ModelEnv(args, get_model_config(args.dataset), testing = True)
@@ -96,22 +96,29 @@ done = False
 obs, _ = env.reset()
 
 if not args.use_custom_strategy:
-    agent = rl_algorithms[args.agent]("MlpPolicy", env, action_noise = None, verbose = 1)
-    rl_model = agent.load(args.agent_path)
-    while not done:
-        action, _states = rl_model.predict(obs)
-        obs, rewards, done, _, info = env.step(action)
+	agent = rl_algorithms[args.agent]("MlpPolicy", env, action_noise = None, verbose = 1)
+	rl_model = agent.load(args.agent_path)
+	while not done:
+		action, _states = rl_model.predict(obs)
+		obs, rewards, done, _, info = env.step(action)
 else:
-    # convert string strategy to list
-    strategy = args.strategy.replace("[", "").replace("]", "")
-    strategy = list(strategy.split(", "))
-    strategy = [int(s) for s in strategy]
-
-    idx = 0
-    while not done:
-        action = strategy[idx]
-        done, info = env.step_(action)
-        idx += 1
+	# convert string strategy to list
+	strategy = []
+	for i in range(env.num_quant_acts):
+		strategy.append(args.act_bit_width)
+	
+	for i in range(env.num_quant_acts, len(env.quantizable_idx)):
+		strategy.append(args.weight_bit_width)
+	'''
+	strategy = args.strategy.replace("[", "").replace("]", "")
+	strategy = list(strategy.split(", "))
+	strategy = [int(s) for s in strategy]
+	'''
+	idx = 0
+	while not done:
+		action = strategy[idx]
+		done, info = env.step_(action)
+		idx += 1
 
 model = deepcopy(env.model)
 model.eval()
@@ -145,4 +152,3 @@ orig_model.eval()
 orig_model.cpu()
 name = output + '.onnx'
 torch.onnx.export(orig_model, ref_input, name, export_params = True, opset_version=11)
-
