@@ -89,7 +89,7 @@ if args.device == 'GPU' and torch.cuda.is_available():
 	torch.cuda.manual_seed_all(args.seed)
 
 # create environment
-env = ModelEnv(args, get_model_config(args.dataset), testing = True)
+env = ModelEnv(args, get_model_config(args.dataset), testing=False)
 
 n_actions = env.action_space.shape[-1]
 
