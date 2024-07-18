@@ -34,11 +34,12 @@ class Quantizer(object):
             self,
             weight_bit_width,
             act_bit_width,
+            residual_bit_width
     ):
         weight_bit_width_dict = {}
         act_bit_width_dict = {}
         weight_bit_width_dict['weight_bit_width'] = weight_bit_width
-        act_bit_width_dict['act_bit_width'] = act_bit_width
+        act_bit_width_dict['act_bit_width'] = residual_bit_width # keep the residual bit width for activations
 
         quant_layer_map, quant_act_map, quant_identity_map = self.create_quant_maps(
             bias_bit_width = 8,

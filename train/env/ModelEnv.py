@@ -126,6 +126,7 @@ class ModelEnv(gym.Env):
         self.quantizer = Quantizer(
             args.weight_bit_width,
             args.act_bit_width,
+            args.residual_bit_width
         )
     
         self.orig_acc = self.finetuner.orig_acc
@@ -240,6 +241,7 @@ class ModelEnv(gym.Env):
         self.quantizer = Quantizer(
             self.args.weight_bit_width,
             self.args.act_bit_width,
+            self.args.residual_bit_width
         )
         return obs, {}
 

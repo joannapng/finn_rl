@@ -53,6 +53,7 @@ parser.add_argument('--loss', default = 'CrossEntropy', choices = ['CrossEntropy
 parser.add_argument('--device', default = 'GPU', help = 'Device for training (default: GPU)')
 
 # Quantization Parameters
+parser.add_argument('--residual-bit-width', default = 4, type = int, help = 'Bit width for residual connections (default: 4)')
 parser.add_argument('--act-bit-width', default=4, type=int, help = 'Bit width for activations (default: 4)')
 parser.add_argument('--weight-bit-width', default=4, type=int, help = 'Bit width for weights (default: 4)')
 parser.add_argument('--min-bit', type=int, default=1, help = 'Minimum bit width (default: 1)')
