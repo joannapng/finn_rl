@@ -166,7 +166,7 @@ def set_folding(model, output_dir, board_file, freq, target_fps, slr):
 	
 	model, max_cycles, avg_util, feasible = folding(model, available_resources, freq, target_fps, slr)
 	if not feasible:
-		return model, 1000000, avg_util
+		return model, -1, avg_util
 	else:
 		hw_attrs = [
 		"PE",
