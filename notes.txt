@@ -1,0 +1,4 @@
+Trained MobileNet for 20 epochs
+MobileNet freq 200 and target fps 100
+python test.py --model-name MobileNet --model-path checkpoints/MobileNet_15588ef9-eb36-49e5-8418-39921a518ae6/checkpoints/MobileNet_best.tar --finetuning-epochs 10 --residual-bit-width 8 --act-bit-width 7 --weight-bit-width 7 --use-custom-strategy --freq 200 --target-fps 100 --output-dir MobileNet_a7w7 --onnx-output MobileNet
+Implementing MobileNet with 7 bit acts and 7 bits weights (w8a8 could not be implemented) - accuracy for a7w7 83.88

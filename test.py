@@ -1,5 +1,6 @@
 import os
 import torch
+import torch.nn as nn
 import random
 import numpy as np
 import argparse
@@ -146,6 +147,7 @@ device, dtype = next(model.parameters()).device, next(model.parameters()).dtype
 ref_input = torch.randn(1, env.finetuner.in_channels, img_shape, img_shape, device = device, dtype = dtype)
 
 name = output + '_quant.onnx'
+
 bo.export_qonnx(model, input_t = ref_input, export_path = name, opset_version = 11, keep_initializers_as_inputs = False)
 
 # export original model to onnx

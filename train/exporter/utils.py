@@ -445,14 +445,13 @@ def folding(model, available_resources, freq, target_fps, slr):
 
 	if not feasible:
 		avg_util, max_util = avg_utilization(model, available_resources)
-		return model, 0.0, avg_util, False
+		return model, 0.0, avg_util, False, None
 
 	while feasible:
 		prev_model = deepcopy(model)
 		cycles_per_layer = estimate_cycles(model)
 		sorted_cycles_per_layer = sorted(cycles_per_layer.items(), key = lambda x : x[1], reverse = True)
 		bottleneck_layer, latency = sorted_cycles_per_layer[0]
-		print(bottleneck_layer)
 		fps = freq * 10**6 / latency
 
 		if fps >= target_fps:
@@ -477,4 +476,4 @@ def folding(model, available_resources, freq, target_fps, slr):
 	cycles_per_layer = estimate_cycles(model)
 	max_cycles = max(cycles_per_layer.items(), key = lambda x : x[1])[1]
 	avg_util, _ = avg_utilization(model, available_resources)
-	return model, max_cycles, avg_util, True
+	return model, max_cycles, avg_util, True, bottleneck_layer

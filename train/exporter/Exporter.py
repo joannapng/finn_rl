@@ -164,9 +164,9 @@ def set_folding(model, output_dir, board_file, freq, target_fps, slr):
 		available_resources[resource] *= RESOURCE_LIMITS[resource]
 		available_resources[resource] = math.floor(available_resources[resource])
 	
-	model, max_cycles, avg_util, feasible = folding(model, available_resources, freq, target_fps, slr)
+	model, max_cycles, avg_util, feasible, bottleneck_layer = folding(model, available_resources, freq, target_fps, slr)
 	if not feasible:
-		return model, -1, avg_util
+		return model, -1, avg_util, bottleneck_layer
 	else:
 		hw_attrs = [
 		"PE",
@@ -184,7 +184,7 @@ def set_folding(model, output_dir, board_file, freq, target_fps, slr):
 		]
 
 		extract_model_config_to_json(model, os.path.join(output_dir, "folding_config.json"), hw_attrs)
-		return model, max_cycles, avg_util
+		return model, max_cycles, avg_util, bottleneck_layer
 
 def minimize_bit_width(model):
 	model = model.transform(MinimizeWeightBitWidth())

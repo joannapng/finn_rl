@@ -54,6 +54,7 @@ parser.add_argument('--loss', default = 'CrossEntropy', choices = ['CrossEntropy
 parser.add_argument('--device', default = 'GPU', help = 'Device for training (default: GPU)')
 
 # Quantization Parameters
+parser.add_argument('--residual-bit-width', default = 4, type = int, help = 'Bit width for residual connections (default: 4)')
 parser.add_argument('--act-bit-width', default=4, type=int, help = 'Bit width for activations (default: 4)')
 parser.add_argument('--weight-bit-width', default=4, type=int, help = 'Bit width for weights (default: 4)')
 parser.add_argument('--min-bit', type=int, default=1, help = 'Minimum bit width (default: 1)')
@@ -69,6 +70,8 @@ parser.add_argument('--seed', default = 234, type = int, help = 'Seed to reprodu
 
 # Design Parameters
 parser.add_argument('--board', default = "U250", help = "Name of target board (default: U250)")
+parser.add_argument('--board-file', default = 'platforms/u250.json', help = "Name of file with resources (default: platforms/u250.json)")
+parser.add_argument('--slr', type = int, default = -1, help = 'SLR to map the accelerator (default: -1)')
 parser.add_argument('--shell-flow-type', default = "vitis_alveo", choices = ["vivado_zynq", "vitis_alveo"], help = "Target shell type (default: vitis_alveo)")
 parser.add_argument('--freq', type = float, default = 300.0, help = 'Frequency in MHz (default: 300)')
 parser.add_argument('--max-freq', type = float, default = 300.0, help = 'Maximum device frequency in MHz (default: 300)')
@@ -90,9 +93,9 @@ def main():
     eval_env = ModelEnv(args, get_model_config(args.dataset), testing = True)
 
     env = Monitor(
-        ModelEnv(args, get_model_config(args.dataset)),
+        ModelEnv(args, get_model_config(args.dataset), testing = False),
         filename = 'monitor.csv',
-        info_keywords=('accuracy', 'fps', 'avg_util', 'strategy')
+        info_keywords=('accuracy', 'fps', 'avg_util', 'strategy'),
     )
 
     n_actions = env.action_space.shape[-1]

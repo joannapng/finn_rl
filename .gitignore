@@ -19,4 +19,5 @@ resnet18*/
 resnet18_build/
 MobileNet/
 MobileNet_build/
+MobileNet_a7w7
 *.ipynb
