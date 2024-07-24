@@ -378,12 +378,15 @@ class Quantizer(object):
                         quant_module_class, quant_module_kwargs = deepcopy(layer_map[type(module)])
                         quant_module_kwargs['weight_bit_width'] = weight_bit_width 
 
+                        
                         if weight_bit_width == 1:
                             # to avoid inf scale
-                            quant_module_kwargs['scaling_impl'] = ParameterScaling(scaling_init=0.1)
+                            #quant_module_kwargs['scaling_impl'] = ParameterScaling(scaling_init=0.1)
+                            quant_module_kwargs['scaling_impl'] = ScalingImplType.STATS
                             quant_module_kwargs['weight_narrow_range'] = False
                         else:
                             quant_module_kwargs['scaling_impl'] = ScalingImplType.STATS
+                        
                             
                         if module.bias is not None:
                             # add bias quant if the module has bias
