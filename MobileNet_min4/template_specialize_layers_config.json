@@ -1,0 +1,111 @@
+{
+  "Defaults": {},
+  "Thresholding_MultiThreshold_0": {
+    "preferred_impl_style": ""
+  },
+  "FMPadding_Batch_": {
+    "preferred_impl_style": ""
+  },
+  "ConvolutionInputGenerator_": {
+    "preferred_impl_style": ""
+  },
+  "MVAU_": {
+    "preferred_impl_style": ""
+  },
+  "Thresholding_MultiThreshold_1": {
+    "preferred_impl_style": ""
+  },
+  "VVAU_": {
+    "preferred_impl_style": ""
+  },
+  "Thresholding_MultiThreshold_2": {
+    "preferred_impl_style": ""
+  },
+  "Thresholding_MultiThreshold_3": {
+    "preferred_impl_style": ""
+  },
+  "Thresholding_MultiThreshold_4": {
+    "preferred_impl_style": ""
+  },
+  "Thresholding_MultiThreshold_5": {
+    "preferred_impl_style": ""
+  },
+  "Thresholding_MultiThreshold_6": {
+    "preferred_impl_style": ""
+  },
+  "Thresholding_MultiThreshold_7": {
+    "preferred_impl_style": ""
+  },
+  "Thresholding_MultiThreshold_8": {
+    "preferred_impl_style": ""
+  },
+  "Thresholding_MultiThreshold_9": {
+    "preferred_impl_style": ""
+  },
+  "Thresholding_MultiThreshold_10": {
+    "preferred_impl_style": ""
+  },
+  "Thresholding_MultiThreshold_11": {
+    "preferred_impl_style": ""
+  },
+  "Thresholding_MultiThreshold_12": {
+    "preferred_impl_style": ""
+  },
+  "Thresholding_MultiThreshold_13": {
+    "preferred_impl_style": ""
+  },
+  "Thresholding_MultiThreshold_14": {
+    "preferred_impl_style": ""
+  },
+  "Thresholding_MultiThreshold_15": {
+    "preferred_impl_style": ""
+  },
+  "Thresholding_MultiThreshold_16": {
+    "preferred_impl_style": ""
+  },
+  "Thresholding_MultiThreshold_17": {
+    "preferred_impl_style": ""
+  },
+  "Thresholding_MultiThreshold_18": {
+    "preferred_impl_style": ""
+  },
+  "Thresholding_MultiThreshold_19": {
+    "preferred_impl_style": ""
+  },
+  "Thresholding_MultiThreshold_20": {
+    "preferred_impl_style": ""
+  },
+  "Thresholding_MultiThreshold_21": {
+    "preferred_impl_style": ""
+  },
+  "Thresholding_MultiThreshold_22": {
+    "preferred_impl_style": ""
+  },
+  "Thresholding_MultiThreshold_23": {
+    "preferred_impl_style": ""
+  },
+  "Thresholding_MultiThreshold_24": {
+    "preferred_impl_style": ""
+  },
+  "Thresholding_MultiThreshold_25": {
+    "preferred_impl_style": ""
+  },
+  "Thresholding_MultiThreshold_26": {
+    "preferred_impl_style": ""
+  },
+  "Thresholding_MultiThreshold_27": {
+    "preferred_impl_style": ""
+  },
+  "GlobalAccPool_GlobalAveragePool_0": {
+    "preferred_impl_style": ""
+  },
+  "Thresholding_MultiThreshold_28": {
+    "preferred_impl_style": ""
+  },
+  "MVAU_MatMul_0": {
+    "preferred_impl_style": ""
+  },
+  "LabelSelect_TopK_0": {
+    "preferred_impl_style": ""
+  }
+}

@@ -78,7 +78,7 @@ parser.add_argument('--output-dir', type = str, default = 'Model', help = 'Outpu
 parser.add_argument('--onnx-output', type = str, default = 'model', help = 'Onnx output name (default: model)')
 
 parser.add_argument('--use-custom-strategy', action = 'store_true', default = False, help = 'Use custom quantization strategy (overrides agent parameter, default: False)')
-#parser.add_argument('--strategy', type = str, default = '', help = 'Custom quantization strategy (example input: \"[7, 8, 1, 3, 1, 4]\")')
+parser.add_argument('--strategy', type = str, default = None, help = 'Custom quantization strategy (example input: \"[7, 8, 1, 3, 1, 4]\")')
 
 args = parser.parse_args()
 args.fpga_part = part_map[args.board]
@@ -107,16 +107,19 @@ if not args.use_custom_strategy:
 else:
 	# convert string strategy to list
 	strategy = []
-	for i in range(env.num_quant_acts):
-		strategy.append(args.act_bit_width)
 	
-	for i in range(env.num_quant_acts, len(env.quantizable_idx)):
-		strategy.append(args.weight_bit_width)
-	'''
-	strategy = args.strategy.replace("[", "").replace("]", "")
-	strategy = list(strategy.split(", "))
-	strategy = [int(s) for s in strategy]
-	'''
+	if args.strategy is None:
+		for i in range(env.num_quant_acts):
+			strategy.append(args.act_bit_width)
+		
+		for i in range(env.num_quant_acts, len(env.quantizable_idx)):
+			strategy.append(args.weight_bit_width)
+		
+	else:
+		strategy = args.strategy.replace("[", "").replace("]", "")
+		strategy = list(strategy.split(", "))
+		strategy = [int(s) for s in strategy]
+		
 	idx = 0
 	while not done:
 		action = strategy[idx]

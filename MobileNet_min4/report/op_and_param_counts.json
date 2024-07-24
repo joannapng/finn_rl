@@ -1,0 +1,183 @@
+{
+  "Thresholding_rtl_0": {},
+  "FMPadding_rtl_0": {},
+  "ConvolutionInputGenerator_rtl_0": {},
+  "MVAU_rtl_0": {
+    "op_mac_8bx8b": 884736,
+    "param_weight_8b": 864
+  },
+  "Thresholding_rtl_1": {},
+  "FMPadding_rtl_1": {},
+  "ConvolutionInputGenerator_rtl_1": {},
+  "VVAU_hls_0": {
+    "op_mac_4bx8b": 294912,
+    "param_weight_8b": 288
+  },
+  "Thresholding_rtl_2": {},
+  "MVAU_rtl_1": {
+    "op_mac_5bx8b": 2097152,
+    "param_weight_8b": 2048
+  },
+  "Thresholding_rtl_3": {},
+  "FMPadding_rtl_2": {},
+  "ConvolutionInputGenerator_rtl_2": {},
+  "VVAU_hls_1": {
+    "op_mac_4bx8b": 147456,
+    "param_weight_8b": 576
+  },
+  "Thresholding_rtl_4": {},
+  "MVAU_rtl_2": {
+    "op_mac_4bx8b": 2097152,
+    "param_weight_8b": 8192
+  },
+  "Thresholding_rtl_5": {},
+  "FMPadding_rtl_3": {},
+  "ConvolutionInputGenerator_rtl_3": {},
+  "VVAU_hls_2": {
+    "op_mac_4bx8b": 294912,
+    "param_weight_8b": 1152
+  },
+  "Thresholding_rtl_6": {},
+  "MVAU_rtl_3": {
+    "op_mac_4bx8b": 4194304,
+    "param_weight_8b": 16384
+  },
+  "Thresholding_rtl_7": {},
+  "FMPadding_rtl_4": {},
+  "ConvolutionInputGenerator_rtl_4": {},
+  "VVAU_hls_3": {
+    "op_mac_4bx8b": 73728,
+    "param_weight_8b": 1152
+  },
+  "Thresholding_rtl_8": {},
+  "MVAU_rtl_4": {
+    "op_mac_4bx8b": 2097152,
+    "param_weight_8b": 32768
+  },
+  "Thresholding_rtl_9": {},
+  "FMPadding_rtl_5": {},
+  "ConvolutionInputGenerator_rtl_5": {},
+  "VVAU_hls_4": {
+    "op_mac_4bx8b": 147456,
+    "param_weight_8b": 2304
+  },
+  "Thresholding_rtl_10": {},
+  "MVAU_rtl_5": {
+    "op_mac_4bx8b": 4194304,
+    "param_weight_8b": 65536
+  },
+  "Thresholding_rtl_11": {},
+  "FMPadding_rtl_6": {},
+  "ConvolutionInputGenerator_rtl_6": {},
+  "VVAU_hls_5": {
+    "op_mac_4bx8b": 36864,
+    "param_weight_8b": 2304
+  },
+  "Thresholding_rtl_12": {},
+  "MVAU_rtl_6": {
+    "op_mac_4bx8b": 2097152,
+    "param_weight_8b": 131072
+  },
+  "Thresholding_rtl_13": {},
+  "FMPadding_rtl_7": {},
+  "ConvolutionInputGenerator_rtl_7": {},
+  "VVAU_hls_6": {
+    "op_mac_4bx8b": 73728,
+    "param_weight_8b": 4608
+  },
+  "Thresholding_rtl_14": {},
+  "MVAU_rtl_7": {
+    "op_mac_4bx8b": 4194304,
+    "param_weight_8b": 262144
+  },
+  "Thresholding_rtl_15": {},
+  "FMPadding_rtl_8": {},
+  "ConvolutionInputGenerator_rtl_8": {},
+  "VVAU_hls_7": {
+    "op_mac_4bx8b": 73728,
+    "param_weight_8b": 4608
+  },
+  "Thresholding_rtl_16": {},
+  "MVAU_rtl_8": {
+    "op_mac_4bx8b": 4194304,
+    "param_weight_8b": 262144
+  },
+  "Thresholding_rtl_17": {},
+  "FMPadding_rtl_9": {},
+  "ConvolutionInputGenerator_rtl_9": {},
+  "VVAU_hls_8": {
+    "op_mac_4bx8b": 73728,
+    "param_weight_8b": 4608
+  },
+  "Thresholding_rtl_18": {},
+  "MVAU_rtl_9": {
+    "op_mac_4bx8b": 4194304,
+    "param_weight_8b": 262144
+  },
+  "Thresholding_rtl_19": {},
+  "FMPadding_rtl_10": {},
+  "ConvolutionInputGenerator_rtl_10": {},
+  "VVAU_hls_9": {
+    "op_mac_4bx8b": 73728,
+    "param_weight_8b": 4608
+  },
+  "Thresholding_rtl_20": {},
+  "MVAU_rtl_10": {
+    "op_mac_4bx8b": 4194304,
+    "param_weight_8b": 262144
+  },
+  "Thresholding_rtl_21": {},
+  "FMPadding_rtl_11": {},
+  "ConvolutionInputGenerator_rtl_11": {},
+  "VVAU_hls_10": {
+    "op_mac_4bx8b": 73728,
+    "param_weight_8b": 4608
+  },
+  "Thresholding_rtl_22": {},
+  "MVAU_rtl_11": {
+    "op_mac_4bx8b": 4194304,
+    "param_weight_8b": 262144
+  },
+  "Thresholding_rtl_23": {},
+  "FMPadding_rtl_12": {},
+  "ConvolutionInputGenerator_rtl_12": {},
+  "VVAU_hls_11": {
+    "op_mac_4bx8b": 18432,
+    "param_weight_8b": 4608
+  },
+  "Thresholding_rtl_24": {},
+  "MVAU_rtl_12": {
+    "op_mac_4bx8b": 2097152,
+    "param_weight_8b": 524288
+  },
+  "Thresholding_rtl_25": {},
+  "FMPadding_rtl_13": {},
+  "ConvolutionInputGenerator_rtl_13": {},
+  "VVAU_hls_12": {
+    "op_mac_4bx8b": 36864,
+    "param_weight_8b": 9216
+  },
+  "Thresholding_rtl_26": {},
+  "MVAU_rtl_13": {
+    "op_mac_4bx8b": 4194304,
+    "param_weight_8b": 1048576
+  },
+  "Thresholding_rtl_27": {},
+  "GlobalAccPool_hls_0": {},
+  "Thresholding_rtl_28": {},
+  "MVAU_hls_0": {
+    "op_mac_4bx5b": 10240,
+    "param_weight_5b": 10240,
+    "param_threshold_16b": 10
+  },
+  "LabelSelect_hls_0": {},
+  "total": {
+    "op_mac_8bx8b": 884736.0,
+    "param_weight_8b": 3185088.0,
+    "op_mac_4bx8b": 43362304.0,
+    "op_mac_5bx8b": 2097152.0,
+    "op_mac_4bx5b": 10240.0,
+    "param_weight_5b": 10240.0,
+    "param_threshold_16b": 10.0
+  }
+}

@@ -1,0 +1,162 @@
+[2024-07-24 11:50:16,553] Running step: preprocessing [1/24]
+[2024-07-24 11:50:16,811] /home/dais/ioanna/finn/deps/qonnx/src/qonnx/transformation/infer_data_layouts.py:127: UserWarning: Assuming 4D input is NCHW
+[2024-07-24 11:50:16,811]   warnings.warn("Assuming 4D input is NCHW")
+[2024-07-24 11:50:17,932] Running step: postprocessing [2/24]
+[2024-07-24 11:50:18,551] Running step: make_input_channels_last [3/24]
+[2024-07-24 11:50:18,578] Running step: step_tidy_up [4/24]
+[2024-07-24 11:50:19,231] Running step: name_nodes [5/24]
+[2024-07-24 11:50:19,630] Running step: step_qonnx_to_finn [6/24]
+[2024-07-24 11:50:20,274] /home/dais/ioanna/finn/deps/qonnx/src/qonnx/transformation/gemm_to_matmul.py:57: UserWarning: The GemmToMatMul transformation only offers explicit support for version 9 of the Gemm node, but the ONNX version of the supplied model is 11. Thus the transformation may fail or return incomplete results.
+[2024-07-24 11:50:20,274]   warnings.warn(
+[2024-07-24 11:50:22,636] Running step: name_nodes [7/24]
+[2024-07-24 11:50:22,848] Running step: streamline_mobilenet [8/24]
+[2024-07-24 11:50:23,361] Running step: convert_to_hw_mobilenet [9/24]
+[2024-07-24 11:50:24,234] Running step: step_create_dataflow_partition [10/24]
+[2024-07-24 11:50:24,288] Running step: step_specialize_layers [11/24]
+[2024-07-24 11:50:24,345] Running step: step_apply_folding_config [12/24]
+[2024-07-24 11:50:24,368] Running step: step_minimize_bit_width [13/24]
+[2024-07-24 11:50:24,402] /home/dais/ioanna/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_1: INT32 -> INT18
+[2024-07-24 11:50:24,402]   warnings.warn(warn_str)
+[2024-07-24 11:50:24,452] /home/dais/ioanna/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_2: INT32 -> INT14
+[2024-07-24 11:50:24,453]   warnings.warn(warn_str)
+[2024-07-24 11:50:24,503] /home/dais/ioanna/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_3: INT32 -> INT15
+[2024-07-24 11:50:24,503]   warnings.warn(warn_str)
+[2024-07-24 11:50:24,556] /home/dais/ioanna/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_4: INT32 -> INT14
+[2024-07-24 11:50:24,556]   warnings.warn(warn_str)
+[2024-07-24 11:50:24,607] /home/dais/ioanna/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_5: INT32 -> INT15
+[2024-07-24 11:50:24,607]   warnings.warn(warn_str)
+[2024-07-24 11:50:24,660] /home/dais/ioanna/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_6: INT32 -> INT14
+[2024-07-24 11:50:24,660]   warnings.warn(warn_str)
+[2024-07-24 11:50:24,711] /home/dais/ioanna/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_7: INT32 -> INT16
+[2024-07-24 11:50:24,711]   warnings.warn(warn_str)
+[2024-07-24 11:50:24,763] /home/dais/ioanna/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_8: INT32 -> INT14
+[2024-07-24 11:50:24,763]   warnings.warn(warn_str)
+[2024-07-24 11:50:24,815] /home/dais/ioanna/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_9: INT32 -> INT17
+[2024-07-24 11:50:24,815]   warnings.warn(warn_str)
+[2024-07-24 11:50:24,868] /home/dais/ioanna/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_10: INT32 -> INT13
+[2024-07-24 11:50:24,868]   warnings.warn(warn_str)
+[2024-07-24 11:50:24,922] /home/dais/ioanna/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_11: INT32 -> INT17
+[2024-07-24 11:50:24,922]   warnings.warn(warn_str)
+[2024-07-24 11:50:24,975] /home/dais/ioanna/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_12: INT32 -> INT14
+[2024-07-24 11:50:24,975]   warnings.warn(warn_str)
+[2024-07-24 11:50:25,029] /home/dais/ioanna/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_13: INT32 -> INT17
+[2024-07-24 11:50:25,029]   warnings.warn(warn_str)
+[2024-07-24 11:50:25,085] /home/dais/ioanna/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_14: INT32 -> INT14
+[2024-07-24 11:50:25,085]   warnings.warn(warn_str)
+[2024-07-24 11:50:25,142] /home/dais/ioanna/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_15: INT32 -> INT18
+[2024-07-24 11:50:25,142]   warnings.warn(warn_str)
+[2024-07-24 11:50:25,199] /home/dais/ioanna/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_16: INT32 -> INT14
+[2024-07-24 11:50:25,199]   warnings.warn(warn_str)
+[2024-07-24 11:50:25,256] /home/dais/ioanna/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_17: INT32 -> INT17
+[2024-07-24 11:50:25,257]   warnings.warn(warn_str)
+[2024-07-24 11:50:25,312] /home/dais/ioanna/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_18: INT32 -> INT14
+[2024-07-24 11:50:25,312]   warnings.warn(warn_str)
+[2024-07-24 11:50:25,370] /home/dais/ioanna/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_19: INT32 -> INT17
+[2024-07-24 11:50:25,371]   warnings.warn(warn_str)
+[2024-07-24 11:50:25,427] /home/dais/ioanna/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_20: INT32 -> INT14
+[2024-07-24 11:50:25,427]   warnings.warn(warn_str)
+[2024-07-24 11:50:25,484] /home/dais/ioanna/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_21: INT32 -> INT17
+[2024-07-24 11:50:25,484]   warnings.warn(warn_str)
+[2024-07-24 11:50:25,540] /home/dais/ioanna/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_22: INT32 -> INT14
+[2024-07-24 11:50:25,540]   warnings.warn(warn_str)
+[2024-07-24 11:50:25,597] /home/dais/ioanna/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_23: INT32 -> INT16
+[2024-07-24 11:50:25,597]   warnings.warn(warn_str)
+[2024-07-24 11:50:25,653] /home/dais/ioanna/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_24: INT32 -> INT13
+[2024-07-24 11:50:25,653]   warnings.warn(warn_str)
+[2024-07-24 11:50:25,712] /home/dais/ioanna/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_25: INT32 -> INT17
+[2024-07-24 11:50:25,712]   warnings.warn(warn_str)
+[2024-07-24 11:50:25,772] /home/dais/ioanna/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_26: INT32 -> INT14
+[2024-07-24 11:50:25,772]   warnings.warn(warn_str)
+[2024-07-24 11:50:25,841] /home/dais/ioanna/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_27: INT32 -> INT18
+[2024-07-24 11:50:25,841]   warnings.warn(warn_str)
+[2024-07-24 11:50:25,968] Running step: step_generate_estimate_reports [14/24]
+[2024-07-24 11:50:26,064] Running step: name_nodes [15/24]
+[2024-07-24 11:50:26,147] Running step: step_hw_codegen [16/24]
+[2024-07-24 11:50:26,148] Optype: Thresholding_rtl Name: Thresholding_rtl_0
+[2024-07-24 11:50:26,202] Optype: FMPadding_rtl Name: FMPadding_rtl_0
+[2024-07-24 11:50:26,203] Optype: ConvolutionInputGenerator_rtl Name: ConvolutionInputGenerator_rtl_0
+[2024-07-24 11:50:26,204] Optype: MVAU_rtl Name: MVAU_rtl_0
+[2024-07-24 11:50:26,227] Optype: Thresholding_rtl Name: Thresholding_rtl_1
+[2024-07-24 11:50:26,268] Optype: FMPadding_rtl Name: FMPadding_rtl_1
+[2024-07-24 11:50:26,268] Optype: ConvolutionInputGenerator_rtl Name: ConvolutionInputGenerator_rtl_1
+[2024-07-24 11:50:26,269] Optype: VVAU_hls Name: VVAU_hls_0
+[2024-07-24 11:50:26,278] Optype: Thresholding_rtl Name: Thresholding_rtl_2
+[2024-07-24 11:50:26,359] Optype: MVAU_rtl Name: MVAU_rtl_1
+[2024-07-24 11:50:26,395] Optype: Thresholding_rtl Name: Thresholding_rtl_3
+[2024-07-24 11:50:26,475] Optype: FMPadding_rtl Name: FMPadding_rtl_2
+[2024-07-24 11:50:26,476] Optype: ConvolutionInputGenerator_rtl Name: ConvolutionInputGenerator_rtl_2
+[2024-07-24 11:50:26,477] Optype: VVAU_hls Name: VVAU_hls_1
+[2024-07-24 11:50:26,492] Optype: Thresholding_rtl Name: Thresholding_rtl_4
+[2024-07-24 11:50:26,573] Optype: MVAU_rtl Name: MVAU_rtl_2
+[2024-07-24 11:50:26,715] Optype: Thresholding_rtl Name: Thresholding_rtl_5
+[2024-07-24 11:50:26,875] Optype: FMPadding_rtl Name: FMPadding_rtl_3
+[2024-07-24 11:50:26,876] Optype: ConvolutionInputGenerator_rtl Name: ConvolutionInputGenerator_rtl_3
+[2024-07-24 11:50:26,877] Optype: VVAU_hls Name: VVAU_hls_2
+[2024-07-24 11:50:26,907] Optype: Thresholding_rtl Name: Thresholding_rtl_6
+[2024-07-24 11:50:27,067] Optype: MVAU_rtl Name: MVAU_rtl_3
+[2024-07-24 11:50:27,277] Optype: Thresholding_rtl Name: Thresholding_rtl_7
+[2024-07-24 11:50:27,418] Optype: FMPadding_rtl Name: FMPadding_rtl_4
+[2024-07-24 11:50:27,418] Optype: ConvolutionInputGenerator_rtl Name: ConvolutionInputGenerator_rtl_4
+[2024-07-24 11:50:27,419] Optype: VVAU_hls Name: VVAU_hls_3
+[2024-07-24 11:50:27,450] Optype: Thresholding_rtl Name: Thresholding_rtl_8
+[2024-07-24 11:50:27,609] Optype: MVAU_rtl Name: MVAU_rtl_4
+[2024-07-24 11:50:28,182] Optype: Thresholding_rtl Name: Thresholding_rtl_9
+[2024-07-24 11:50:28,503] Optype: FMPadding_rtl Name: FMPadding_rtl_5
+[2024-07-24 11:50:28,503] Optype: ConvolutionInputGenerator_rtl Name: ConvolutionInputGenerator_rtl_5
+[2024-07-24 11:50:28,504] Optype: VVAU_hls Name: VVAU_hls_4
+[2024-07-24 11:50:28,564] Optype: Thresholding_rtl Name: Thresholding_rtl_10
+[2024-07-24 11:50:28,881] Optype: MVAU_rtl Name: MVAU_rtl_5
+[2024-07-24 11:50:29,761] Optype: Thresholding_rtl Name: Thresholding_rtl_11
+[2024-07-24 11:50:30,105] Optype: FMPadding_rtl Name: FMPadding_rtl_6
+[2024-07-24 11:50:30,106] Optype: ConvolutionInputGenerator_rtl Name: ConvolutionInputGenerator_rtl_6
+[2024-07-24 11:50:30,107] Optype: VVAU_hls Name: VVAU_hls_5
+[2024-07-24 11:50:30,166] Optype: Thresholding_rtl Name: Thresholding_rtl_12
+[2024-07-24 11:50:30,484] Optype: MVAU_rtl Name: MVAU_rtl_6
+[2024-07-24 11:50:32,776] Optype: Thresholding_rtl Name: Thresholding_rtl_13
+[2024-07-24 11:50:33,419] Optype: FMPadding_rtl Name: FMPadding_rtl_7
+[2024-07-24 11:50:33,420] Optype: ConvolutionInputGenerator_rtl Name: ConvolutionInputGenerator_rtl_7
+[2024-07-24 11:50:33,420] Optype: VVAU_hls Name: VVAU_hls_6
+[2024-07-24 11:50:33,541] Optype: Thresholding_rtl Name: Thresholding_rtl_14
+[2024-07-24 11:50:34,178] Optype: MVAU_rtl Name: MVAU_rtl_7
+[2024-07-24 11:50:37,614] Optype: Thresholding_rtl Name: Thresholding_rtl_15
+[2024-07-24 11:50:38,257] Optype: FMPadding_rtl Name: FMPadding_rtl_8
+[2024-07-24 11:50:38,257] Optype: ConvolutionInputGenerator_rtl Name: ConvolutionInputGenerator_rtl_8
+[2024-07-24 11:50:38,258] Optype: VVAU_hls Name: VVAU_hls_7
+[2024-07-24 11:50:38,378] Optype: Thresholding_rtl Name: Thresholding_rtl_16
+[2024-07-24 11:50:39,016] Optype: MVAU_rtl Name: MVAU_rtl_8
+[2024-07-24 11:50:42,435] Optype: Thresholding_rtl Name: Thresholding_rtl_17
+[2024-07-24 11:50:43,079] Optype: FMPadding_rtl Name: FMPadding_rtl_9
+[2024-07-24 11:50:43,080] Optype: ConvolutionInputGenerator_rtl Name: ConvolutionInputGenerator_rtl_9
+[2024-07-24 11:50:43,080] Optype: VVAU_hls Name: VVAU_hls_8
+[2024-07-24 11:50:43,198] Optype: Thresholding_rtl Name: Thresholding_rtl_18
+[2024-07-24 11:50:43,835] Optype: MVAU_rtl Name: MVAU_rtl_9
+[2024-07-24 11:50:47,196] Optype: Thresholding_rtl Name: Thresholding_rtl_19
+[2024-07-24 11:50:47,842] Optype: FMPadding_rtl Name: FMPadding_rtl_10
+[2024-07-24 11:50:47,842] Optype: ConvolutionInputGenerator_rtl Name: ConvolutionInputGenerator_rtl_10
+[2024-07-24 11:50:47,843] Optype: VVAU_hls Name: VVAU_hls_9
+[2024-07-24 11:50:47,962] Optype: Thresholding_rtl Name: Thresholding_rtl_20
+[2024-07-24 11:50:48,601] Optype: MVAU_rtl Name: MVAU_rtl_10
+[2024-07-24 11:50:51,951] Optype: Thresholding_rtl Name: Thresholding_rtl_21
+[2024-07-24 11:50:52,596] Optype: FMPadding_rtl Name: FMPadding_rtl_11
+[2024-07-24 11:50:52,597] Optype: ConvolutionInputGenerator_rtl Name: ConvolutionInputGenerator_rtl_11
+[2024-07-24 11:50:52,598] Optype: VVAU_hls Name: VVAU_hls_10
+[2024-07-24 11:50:52,719] Optype: Thresholding_rtl Name: Thresholding_rtl_22
+[2024-07-24 11:50:53,359] Optype: MVAU_rtl Name: MVAU_rtl_11
+[2024-07-24 11:50:56,769] Optype: Thresholding_rtl Name: Thresholding_rtl_23
+[2024-07-24 11:50:57,330] Optype: FMPadding_rtl Name: FMPadding_rtl_12
+[2024-07-24 11:50:57,331] Optype: ConvolutionInputGenerator_rtl Name: ConvolutionInputGenerator_rtl_12
+[2024-07-24 11:50:57,332] Optype: VVAU_hls Name: VVAU_hls_11
+[2024-07-24 11:50:57,451] Optype: Thresholding_rtl Name: Thresholding_rtl_24
+[2024-07-24 11:50:58,089] Optype: MVAU_rtl Name: MVAU_rtl_12
+[2024-07-24 11:51:07,378] Optype: Thresholding_rtl Name: Thresholding_rtl_25
+[2024-07-24 11:51:08,667] Optype: FMPadding_rtl Name: FMPadding_rtl_13
+[2024-07-24 11:51:08,667] Optype: ConvolutionInputGenerator_rtl Name: ConvolutionInputGenerator_rtl_13
+[2024-07-24 11:51:08,668] Optype: VVAU_hls Name: VVAU_hls_12
+[2024-07-24 11:51:08,924] Optype: Thresholding_rtl Name: Thresholding_rtl_26
+[2024-07-24 11:51:10,239] Optype: MVAU_rtl Name: MVAU_rtl_13
+[2024-07-24 11:51:23,737] Optype: Thresholding_rtl Name: Thresholding_rtl_27
+[2024-07-24 11:51:25,023] Optype: GlobalAccPool_hls Name: GlobalAccPool_hls_0
+[2024-07-24 11:51:25,023] Optype: Thresholding_rtl Name: Thresholding_rtl_28
+[2024-07-24 11:51:26,261] Optype: MVAU_hls Name: MVAU_hls_0
+[2024-07-24 11:51:26,582] Optype: LabelSelect_hls Name: LabelSelect_hls_0
+[2024-07-24 11:51:26,596] Running step: step_hw_ipgen [17/24]
