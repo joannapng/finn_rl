@@ -12,6 +12,7 @@ from torchvision.datasets import CIFAR10, MNIST
 from ..logger import Logger
 from ..utils import *
 from ..models import LeNet5, ResNet18, ResNet34, ResNet50, ResNet101, ResNet152, MobileNet
+from .Mask import Mask
 
 networks = {'LeNet5' : LeNet5,
 			'resnet18' : ResNet18, 
@@ -123,8 +124,8 @@ class Trainer(object):
 	def init_model(self):
 		self.best_val_acc = 0.0
 
-		builder = networks[self.args.model_name]
-		self.model = builder(num_classes = self.num_classes, in_channels = self.in_channels).to(self.device)
+		self.model_builder = networks[self.args.model_name]
+		self.model = self.model_builder(num_classes = self.num_classes, in_channels = self.in_channels).to(self.device)
 
 		if self.args.resume_from is not None and not self.args.pretrained: # resume training from checkpoint
 			print('Loading model from checkpoint at: {}'.format(self.args.resume_from))
@@ -146,6 +147,7 @@ class Trainer(object):
 
 		if self.args.resume_from: 
 			# if resuming from checkpoint, the save_dir path is two paths behind
+			self.best_path = self.args.resume_from
 			self.output_dir_path, _ = os.path.split(self.args.resume_from)
 			self.output_dir_path, _ = os.path.split(self.output_dir_path)
 
@@ -179,6 +181,8 @@ class Trainer(object):
 			self.training_optimizer.load_state_dict(package['optim_dict'])
 			self.starting_epoch = package['epoch'] + 1
 			self.best_val_acc = package['best_val_acc']
+			if self.args.prune:
+				self.best_val_acc = 0
 
 	def init_scheduler(self):
 		if self.args.scheduler == 'StepLR':
@@ -234,6 +238,16 @@ class Trainer(object):
 			test_accuracy = self.check_accuracy(self.test_loader, self.model)
 			self.checkpoint(name, -1, test_accuracy, 'best.tar')
 		else:
+			if self.args.prune:
+				m = Mask(self.model, self.args.model_name, self.device, 0, 13)
+				m.init_length()
+				m.model = self.model
+
+				m.init_mask(self.args.prune_rate, self.args.norm_rate, 'l2')
+				m.do_mask()
+				m.do_similar_mask()
+				self.model = m.model
+
 			print('Starting training')
 
 			num_steps = len(self.train_loader)
@@ -260,15 +274,26 @@ class Trainer(object):
 							.format(epoch, self.training_epochs, i, num_steps, loss))
 				
 				self.scheduler.step()
-				# Check validation accuracy every epoch
 
+				if self.args.prune and epoch % self.args.prune_every == 0:
+					m.model = self.model
+					m.if_zero()
+					m.init_mask(self.args.prune_rate, self.args.norm_rate, 'l2')
+					m.do_mask()
+					m.do_similar_mask()
+					m.if_zero()
+					self.model = m.model
+				# Check validation accuracy every epoch
 				print('------- Validation accuracy -------')
 				val_accuracy = self.check_accuracy(self.val_loader, self.model)
 
 				if val_accuracy > self.best_val_acc:
 					# best model is stored with best.tar at the end
 					self.best_val_acc = val_accuracy
-					best_path = self.checkpoint(name, epoch, val_accuracy, 'best.tar')
+					if not self.args.prune:
+						self.best_path = self.checkpoint(name, epoch, val_accuracy, 'best.tar')
+					else:
+						self.best_path = self.checkpoint(name, epoch, val_accuracy, 'best_pruned.tar')
 				else:
 					# model checkpoint every epoch (overrides the checkpoint of previous epoch)
 					self.checkpoint(name, epoch, val_accuracy, "_checkpoint.tar")
@@ -280,10 +305,19 @@ class Trainer(object):
 			print("Training Complete")
 			# Testing accuracy in the testing dataset
 			print('-------- Testing Accuracy -------')
-			package = torch.load(best_path, map_location = self.device)
-			self.model.load_state_dict(package['state_dict'])
-			self.test_acc = self.check_accuracy(self.test_loader, self.model)
-			self.checkpoint(name, package['epoch'], self.test_acc, 'best.tar')
-			return self.test_acc, self.model, best_path
+			if not self.args.prune:
+				package = torch.load(self.best_path, map_location = self.device)
+				self.model.load_state_dict(package['state_dict'])
+				self.test_acc = self.check_accuracy(self.test_loader, self.model)
+				self.checkpoint(name, package['epoch'], self.test_acc, 'best.tar')
+			else:
+				package = torch.load(self.best_path, map_location = self.device)
+				small_model = get_pruned_model(self.model, self.model_builder, self.num_classes, self.in_channels, self.args.prune_rate, self.device)
+				self.model = small_model
+				self.test_acc = self.check_accuracy(self.test_loader, self.model)
+				
+				self.checkpoint(name, package['epoch'], self.test_acc, 'best_pruned.tar')
+
+			return self.test_acc, self.model, self.best_path
 		
 	

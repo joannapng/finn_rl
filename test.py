@@ -80,6 +80,9 @@ parser.add_argument('--onnx-output', type = str, default = 'model', help = 'Onnx
 parser.add_argument('--use-custom-strategy', action = 'store_true', default = False, help = 'Use custom quantization strategy (overrides agent parameter, default: False)')
 parser.add_argument('--strategy', type = str, default = None, help = 'Custom quantization strategy (example input: \"[7, 8, 1, 3, 1, 4]\")')
 
+parser.add_argument('--pruned', action = 'store_true', help = 'True if model has been quantized')
+parser.add_argument('--prune-rate', type = float, default = 0.5, help = 'Percentage at which the model was quantized')
+
 args = parser.parse_args()
 args.fpga_part = part_map[args.board]
 

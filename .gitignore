@@ -20,5 +20,9 @@ resnet18_build/
 MobileNet/
 MobileNet_build/
 MobileNet_a7w7
+MobileNet_slr_3
 MobileNet_min4
+LeNet5_pruned
+MobileNet_a5w5
+resnet50
 *.ipynb

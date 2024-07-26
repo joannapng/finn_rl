@@ -43,6 +43,10 @@ parser.add_argument('--loss', default = 'CrossEntropy', choices = ['CrossEntropy
 parser.add_argument('--device', default = 'GPU', help = 'Device for training (default: GPU)')
 
 parser.add_argument('--seed', default = 234, type = int, help = 'Seed for reproducibility (default: 234)')
+parser.add_argument('--prune', action='store_true', help = 'Prune channel layers')
+parser.add_argument('--prune-rate', default = 0.5, type = float, help = 'Total percentage of conv channels pruned')
+parser.add_argument('--norm-rate', default = 0.25, type = float, help = 'Pruning percentage due to norm criterion')
+parser.add_argument('--prune-every', default = 1, type = int, help = 'Pruning frequency in epochs')
 
 def main():
     args = parser.parse_args()

@@ -163,7 +163,11 @@ class Finetuner(object):
 		
 	def init_model(self):
 		builder = networks[self.args.model_name]
-		self.model = builder(num_classes = self.num_classes, in_channels = self.in_channels).to(self.device)
+
+		if self.args.pruned:
+			self.model = builder(num_classes = self.num_classes, in_channels = self.in_channels, prune_rate = self.args.prune_rate).to(self.device)
+		else:
+			self.model = builder(num_classes = self.num_classes, in_channels = self.in_channels).to(self.device)
 
 		print('Loading model from {}'.format(self.args.model_path))
 

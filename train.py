@@ -77,6 +77,9 @@ parser.add_argument('--freq', type = float, default = 300.0, help = 'Frequency i
 parser.add_argument('--max-freq', type = float, default = 300.0, help = 'Maximum device frequency in MHz (default: 300)')
 parser.add_argument('--target-fps', default = 6000, type = float, help = 'Target fps (default: 6000)')
 
+parser.add_argument('--pruned', action = 'store_true', help = 'True if model has been quantized')
+parser.add_argument('--prune-rate', type = float, default = 0.5, help = 'Percentage at which the model was quantized')
+
 def main():
     args = parser.parse_args()
 

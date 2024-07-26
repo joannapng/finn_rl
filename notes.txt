@@ -4,3 +4,4 @@ python test.py --model-name MobileNet --model-path checkpoints/MobileNet_15588ef
 Implementing MobileNet with 7 bit acts and 7 bits weights (w8a8 could not be implemented) - accuracy for a7w7 83.88
 The same with w5a5
 strategy for MobileNet: "[4, 5, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 5]"
+python test.py --model-name MobileNet --model-path checkpoints/MobileNet_04f657f9-0a92-4f38-8a81-fb194a80bc1c/checkpoints/MobileNet_best.tar --freq 100 --target-fps 80 --output-dir MobileNet_slr_3 --onnx-output MobileNet --use-custom-strategy --strategy "[6, 4, 4, 4, 4, 5, 5, 4, 4, 5, 6, 6, 3, 5, 5, 5, 3, 6, 5, 5, 6, 4, 4, 3, 6, 5, 6, 3, 4, 3, 5, 5, 5, 6, 5, 3, 6, 3, 5, 5, 6, 3, 5, 6, 6, 5, 4, 4, 3, 6, 4, 4, 4, 5, 4]" --finetuning-epochs 10 --slr 3 --board-file platforms/u250_slr_3.json 

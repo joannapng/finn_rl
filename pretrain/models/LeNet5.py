@@ -3,45 +3,36 @@ import torch.nn as nn
 from torch.nn import ModuleList
 
 class LeNet5(nn.Module):
-    def __init__(self, num_classes, in_channels):
+    def __init__(self, num_classes, in_channels, prune_rate = 1.0):
         super(LeNet5, self).__init__()
-        self.conv_features = ModuleList()
-        self.linear_features = ModuleList()
 
-        self.conv_features.append(nn.Conv2d(in_channels, 6, kernel_size=5, stride=1, padding=2))
-        self.conv_features.append(nn.BatchNorm2d(6))
-        self.conv_features.append(nn.ReLU())
-        self.conv_features.append(nn.MaxPool2d(kernel_size = 2, stride = 2))
+        self.conv1 = nn.Conv2d(in_channels, int(6 * prune_rate), kernel_size=5, stride=1, padding=2, bias = False)
+        self.bn1 = nn.BatchNorm2d(int(6 * prune_rate))
+        self.relu1 = nn.ReLU()
+        self.pool1 = nn.MaxPool2d(kernel_size = 2, stride = 2)
 
-        self.conv_features.append(nn.Conv2d(6, 16, kernel_size=5, stride=1, padding=0))
-        self.conv_features.append(nn.BatchNorm2d(16))
-        self.conv_features.append(nn.ReLU())
-        self.conv_features.append(nn.MaxPool2d(kernel_size=2, stride=2))
+        self.conv2 = nn.Conv2d(int(6 * prune_rate), 16, kernel_size=5, stride=1, padding=0, bias = False)
+        self.bn2 = nn.BatchNorm2d(16)
+        self.relu2 = nn.ReLU()
+        self.pool2 = nn.MaxPool2d(kernel_size=2, stride=2)
 
-        self.linear_features.append(nn.Linear(400, 120))
-        self.linear_features.append(nn.ReLU())
-        self.linear_features.append(nn.Linear(120, 84))
-        self.linear_features.append(nn.ReLU())
-        self.linear_features.append(nn.Linear(84, num_classes))
+        self.fc1 = nn.Linear(400, 120)
+        self.relu3 = nn.ReLU()
+        self.fc2 = nn.Linear(120, 84)
+        self.relu4 = nn.ReLU()
+        self.fc3 = nn.Linear(84, num_classes)
 
         self.name = "LeNet5"
 
-    def clip_weights(self, min_val = -1, max_val = 1):
-        for mod in self.conv_features:
-            if isinstance(mod, nn.Conv2d):
-                mod.weight.data.clamp_(min_val, max_val)
-        for mod in self.linear_features:
-            if isinstance(mod, nn.Linear):
-                mod.weight.data.clamp_(min_val, max_val)
         
     def forward(self, x):
         x = 2.0 * x - 1.0
 
-        for mod in self.conv_features:
-            x = mod(x)
-
+        x = self.pool1(self.relu1(self.bn1(self.conv1(x))))
+        x = self.pool2(self.relu2(self.bn2(self.conv2(x))))
         x = x.flatten(1)
-        for mod in self.linear_features:
-            x = mod(x)
+        x = self.relu3(self.fc1(x))
+        x = self.relu4(self.fc2(x))
+        x = self.fc3(x)
         
         return x
